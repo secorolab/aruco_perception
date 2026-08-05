@@ -1,1 +1,26 @@
-# aruco_perception
+# ArUco Perception Package
+
+Package for working with ArUco markers.
+
+## Setup
+
+Create a virtual environment in your workspace with system site packages:
+
+```bash
+cd ~/ws
+uv venv --system-site-packages
+```
+
+Since OpenCV >= 5.0.0 is required, install the dependencies from `requirements.txt`:
+
+```bash
+uv pip install -r src/aruco_perception/requirements.txt
+```
+
+## World Pose Localization Node
+
+This node will broadcast the ArUco marker's pose w.r.t. the camera as a static transform. Run it with:
+
+```bash
+ros2 run aruco_perception world_pose_node
+```
