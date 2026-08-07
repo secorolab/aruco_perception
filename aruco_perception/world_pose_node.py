@@ -9,6 +9,8 @@ from sensor_msgs.msg import Image, CameraInfo
 from geometry_msgs.msg import TransformStamped
 from tf2_ros.static_transform_broadcaster import StaticTransformBroadcaster
 
+from .utils import imgmsg_to_cv2
+
 class WorldPoseNode(Node):
     def __init__(self):
         super().__init__('world_pose_node')
@@ -17,18 +19,24 @@ class WorldPoseNode(Node):
 
         self.declare_parameter('image_topic', '/camera/camera/color/image_raw')
         self.declare_parameter('camera_info_topic', '/camera/camera/color/camera_info')
-        self.declare_parameter('marker_size', 0.1)
-        self.declare_parameter('marker_id_world', 0)
 
-        self.aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
-        self.aruco_params = cv2.aruco.DetectorParameters()
-        self.detector = cv2.aruco.ArucoDetector(self.aruco_dict, self.aruco_params)
+        self.declare_parameter('marker_dict', 'DICT_4X4_50')
+        self.declare_parameter('marker_size', 0.1)
+        self.declare_parameter('marker_id', 0)
+
+        marker_dict = getattr(cv2.aruco, self.get_parameter('marker_dict').value, None)
+        if marker_dict is None:
+            raise ValueError(f"Invalid marker dictionary: {self.get_parameter('marker_dict').value}")
+
+        aruco_dict = cv2.aruco.getPredefinedDictionary(marker_dict)
+        aruco_params = cv2.aruco.DetectorParameters()
+        self.detector = cv2.aruco.ArucoDetector(aruco_dict, aruco_params)
 
         self.camera_matrix = None
         self.dist_coeffs = None
         self.world_tf_published = False
         self.marker_size = self.get_parameter('marker_size').value
-        self.marker_id_world = self.get_parameter('marker_id_world').value
+        self.marker_id = self.get_parameter('marker_id').value
 
         self.image_sub = self.create_subscription(
             Image,
@@ -52,16 +60,6 @@ class WorldPoseNode(Node):
 
         self._logger.info(f"Tf publisher node started, cv2 version: {cv2.__version__}")
 
-    def imgmsg_to_cv2(self, msg):
-        dtype = np.uint16 if '16' in msg.encoding else np.uint8
-        channels = 1 if 'mono' in msg.encoding or msg.encoding == '8UC1' else 3
-        img = np.frombuffer(msg.data, dtype=dtype).reshape(
-            msg.height, msg.width, channels) if channels > 1 else \
-            np.frombuffer(msg.data, dtype=dtype).reshape(msg.height, msg.width)
-        if msg.encoding == 'rgb8':
-            img = img[:, :, ::-1].copy()
-        return img
-
     def camera_info_callback(self, msg):
         self.camera_matrix = np.array(msg.k, dtype=np.float64).reshape(3, 3)
         self.dist_coeffs = np.array(msg.d, dtype=np.float64)
@@ -71,7 +69,7 @@ class WorldPoseNode(Node):
             self._logger.warning("Camera info not received yet, skipping")
             return
 
-        frame = self.imgmsg_to_cv2(msg)
+        frame = imgmsg_to_cv2(msg)
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
         corners, ids, _ = self.detector.detectMarkers(gray)
@@ -88,8 +86,8 @@ class WorldPoseNode(Node):
                 [-half, -half, 0]
             ], dtype=np.float64)
 
-            for i, marker_id in enumerate(ids.flatten()):
-                if marker_id == self.marker_id_world and not self.world_tf_published:
+            for i, detected_marker_id in enumerate(ids.flatten()):
+                if detected_marker_id == self.marker_id and not self.world_tf_published:
                     img_points = corners[i][0].astype(np.float64)
                     ok, rvec, tvec = cv2.solvePnP(
                         obj_points, img_points,
