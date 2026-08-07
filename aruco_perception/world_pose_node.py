@@ -83,7 +83,6 @@ class WorldPoseNode(Node):
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
         corners, ids, _ = self.detector.detectMarkers(gray)
-        self._logger.info(f"Detected {len(corners)} markers: {ids.flatten() if ids is not None else 'None'}")
 
         if ids is not None:
             cv2.aruco.drawDetectedMarkers(frame, corners, ids)
@@ -157,6 +156,8 @@ class WorldPoseNode(Node):
 
                     self.tf_static_broadcaster.sendTransform(tf_msg)
                     self.world_tf_published = True
+
+                    self._logger.info(f"Published world transform based on marker {self.marker_id}")
 
         debug_msg = Image()
         debug_msg.header = msg.header

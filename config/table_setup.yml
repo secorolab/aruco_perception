@@ -1,0 +1,12 @@
+camera:
+  image_topic: /camera/camera/color/image_raw
+  camera_info_topic: /camera/camera/color/camera_info
+
+world_marker:
+  marker_dict: DICT_4X4_50
+  marker_size: 0.1
+  marker_id: 0
+
+objects:
+  marker_dict: DICT_4X4_50
+  marker_size: 0.05
