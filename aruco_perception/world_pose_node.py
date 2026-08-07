@@ -1,5 +1,6 @@
 import rclpy
 from rclpy.node import Node
+from rclpy.time import Time
 
 import cv2
 import numpy as np
@@ -8,6 +9,9 @@ from scipy.spatial.transform import Rotation as R
 from sensor_msgs.msg import Image, CameraInfo
 from geometry_msgs.msg import TransformStamped
 from tf2_ros.static_transform_broadcaster import StaticTransformBroadcaster
+from tf2_ros import TransformException
+from tf2_ros.buffer import Buffer
+from tf2_ros.transform_listener import TransformListener
 
 from .utils import imgmsg_to_cv2
 
@@ -19,10 +23,12 @@ class WorldPoseNode(Node):
 
         self.declare_parameter('image_topic', '/camera/camera/color/image_raw')
         self.declare_parameter('camera_info_topic', '/camera/camera/color/camera_info')
+        self.declare_parameter('camera_link_frame', 'camera_link')
 
         self.declare_parameter('marker_dict', 'DICT_4X4_50')
         self.declare_parameter('marker_size', 0.1)
         self.declare_parameter('marker_id', 0)
+
 
         marker_dict = getattr(cv2.aruco, self.get_parameter('marker_dict').value, None)
         if marker_dict is None:
@@ -37,6 +43,10 @@ class WorldPoseNode(Node):
         self.world_tf_published = False
         self.marker_size = self.get_parameter('marker_size').value
         self.marker_id = self.get_parameter('marker_id').value
+        self.camera_link_frame = self.get_parameter('camera_link_frame').value
+
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
 
         self.image_sub = self.create_subscription(
             Image,
@@ -105,21 +115,45 @@ class WorldPoseNode(Node):
                     T_cam_marker[0:3, 0:3] = R_cam_marker
                     T_cam_marker[0:3, 3] = tvec.reshape(3)
                     
-                    T_world_cam = np.linalg.inv(T_cam_marker)
-                    t_inv = T_world_cam[0:3, 3]
-                    quat_inv = R.from_matrix(T_world_cam[0:3, 0:3]).as_quat()
+                    T_world_optical = np.linalg.inv(T_cam_marker)
+
+                    optical_frame = msg.header.frame_id
+                    try:
+                        tf_optical_link = self.tf_buffer.lookup_transform(optical_frame, self.camera_link_frame, Time())
+                    except TransformException:
+                        self._logger.warning(
+                            f"{optical_frame} -> {self.camera_link_frame} tf not available yet, skipping world publish"
+                        )
+                        continue
+
+                    T_optical_link = np.eye(4)
+                    T_optical_link[0:3, 0:3] = R.from_quat([
+                        tf_optical_link.transform.rotation.x,
+                        tf_optical_link.transform.rotation.y,
+                        tf_optical_link.transform.rotation.z,
+                        tf_optical_link.transform.rotation.w,
+                    ]).as_matrix()
+                    T_optical_link[0:3, 3] = [
+                        tf_optical_link.transform.translation.x,
+                        tf_optical_link.transform.translation.y,
+                        tf_optical_link.transform.translation.z,
+                    ]
+
+                    T_world_link = T_world_optical @ T_optical_link
+                    t_world = T_world_link[0:3, 3]
+                    quat_world = R.from_matrix(T_world_link[0:3, 0:3]).as_quat()
 
                     tf_msg = TransformStamped()
                     tf_msg.header.stamp = self.get_clock().now().to_msg()
                     tf_msg.header.frame_id = "world"
-                    tf_msg.child_frame_id = msg.header.frame_id
-                    tf_msg.transform.translation.x = float(t_inv[0])
-                    tf_msg.transform.translation.y = float(t_inv[1])
-                    tf_msg.transform.translation.z = float(t_inv[2])
-                    tf_msg.transform.rotation.x = float(quat_inv[0])
-                    tf_msg.transform.rotation.y = float(quat_inv[1])
-                    tf_msg.transform.rotation.z = float(quat_inv[2])
-                    tf_msg.transform.rotation.w = float(quat_inv[3])
+                    tf_msg.child_frame_id = self.camera_link_frame
+                    tf_msg.transform.translation.x = float(t_world[0])
+                    tf_msg.transform.translation.y = float(t_world[1])
+                    tf_msg.transform.translation.z = float(t_world[2])
+                    tf_msg.transform.rotation.x = float(quat_world[0])
+                    tf_msg.transform.rotation.y = float(quat_world[1])
+                    tf_msg.transform.rotation.z = float(quat_world[2])
+                    tf_msg.transform.rotation.w = float(quat_world[3])
 
                     self.tf_static_broadcaster.sendTransform(tf_msg)
                     self.world_tf_published = True
