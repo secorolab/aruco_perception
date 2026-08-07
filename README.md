@@ -24,3 +24,11 @@ This node will broadcast the ArUco marker's pose w.r.t. the camera as a static t
 ```bash
 ros2 run aruco_perception world_pose_node
 ```
+
+## Detect Objects Node
+
+This node will detect ArUco markers in the camera image and publish their poses as transforms. Run it with:
+
+```bash
+ros2 run aruco_perception detect_objects_node
+```

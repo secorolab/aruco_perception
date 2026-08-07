@@ -24,7 +24,8 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'world_pose_node = aruco_perception.world_pose_node:main'
+            'world_pose_node = aruco_perception.world_pose_node:main',
+            'detect_objects_node = aruco_perception.detect_objects_node:main'
         ],
     },
 )
