@@ -15,8 +15,8 @@ from tf2_ros.transform_listener import TransformListener
 from .utils import imgmsg_to_cv2
 
 class DetectObjectsNode(Node):
-    def __init__(self):
-        super().__init__('detect_objects_node')
+    def __init__(self, node_name='detect_objects_node'):
+        super().__init__(node_name)
 
         self._logger = self.get_logger()
 

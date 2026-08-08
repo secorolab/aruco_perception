@@ -1,0 +1,9 @@
+frame_id: world
+
+objects:
+  https://example.org/scene/cube:
+    position: [0.45, 0.10, 0.02]
+    orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
+  https://example.org/scene/table:
+    position: [0.50, 0.00, 0.00]
+    orientation_xyzw: [0.0, 0.0, 0.0, 1.0]

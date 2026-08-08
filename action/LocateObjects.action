@@ -1,0 +1,9 @@
+# Which scene entities to find, as model IRIs (e.g.
+# "https://secorolab.github.io/models/pick-place-single/scene/cube").
+string[] target_iris
+---
+# One Detection3D per found target: Detection3D.id = the target IRI,
+# results[0].pose.pose = the pose, header.frame_id = the frame it is expressed in.
+vision_msgs/Detection3DArray detections
+---
+# no feedback fields
