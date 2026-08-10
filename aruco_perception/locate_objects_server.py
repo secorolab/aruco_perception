@@ -12,11 +12,12 @@ from rclpy.time import Time
 
 from tf2_ros import TransformException
 
-from vision_msgs.msg import Detection3D, Detection3DArray, ObjectHypothesisWithPose
+from vision_msgs.msg import Detection3DArray
 
 import yaml
 
 from .detect_objects_node import DetectObjectsNode
+from .utils import detection_msg
 
 
 class LocateObjectsServer(DetectObjectsNode):
@@ -49,9 +50,7 @@ class LocateObjectsServer(DetectObjectsNode):
             callback_group=ReentrantCallbackGroup(),
         )
 
-        self._logger.info(
-            f'Locate objects server started with {len(self.iri_markers)} markers'
-        )
+        self._logger.info(f'Locate objects server started with {len(self.iri_markers)} markers')
 
     def goal_callback(self, goal_request):
         """Reject malformed goals, accept everything else."""
@@ -101,27 +100,21 @@ class LocateObjectsServer(DetectObjectsNode):
         detections.header.stamp = stamp
         detections.header.frame_id = self.result_frame
         for iri in goal_handle.request.target_iris:
-            detections.detections.append(self._detection(iri, found[iri], stamp))
+            translation = found[iri].transform.translation
+            rotation = found[iri].transform.rotation
+            detections.detections.append(
+                detection_msg(
+                    iri,
+                    self.result_frame,
+                    stamp,
+                    (translation.x, translation.y, translation.z),
+                    (rotation.x, rotation.y, rotation.z, rotation.w),
+                )
+            )
 
         result.detections = detections
         goal_handle.succeed()
         return result
-
-    def _detection(self, iri, transform, stamp):
-        detection = Detection3D()
-        detection.header.stamp = stamp
-        detection.header.frame_id = self.result_frame
-        detection.id = iri
-
-        hypothesis = ObjectHypothesisWithPose()
-        hypothesis.hypothesis.score = 1.0
-        hypothesis.pose.pose.position.x = transform.transform.translation.x
-        hypothesis.pose.pose.position.y = transform.transform.translation.y
-        hypothesis.pose.pose.position.z = transform.transform.translation.z
-        hypothesis.pose.pose.orientation = transform.transform.rotation
-        detection.results.append(hypothesis)
-
-        return detection
 
 
 def main(args=None):

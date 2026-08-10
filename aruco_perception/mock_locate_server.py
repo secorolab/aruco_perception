@@ -8,9 +8,11 @@ import rclpy
 from rclpy.action import ActionServer, GoalResponse
 from rclpy.node import Node
 
-from vision_msgs.msg import Detection3D, Detection3DArray, ObjectHypothesisWithPose
+from vision_msgs.msg import Detection3DArray
 
 import yaml
+
+from .utils import detection_msg
 
 
 class MockLocateServer(Node):
@@ -43,9 +45,7 @@ class MockLocateServer(Node):
             execute_callback=self.execute_callback,
         )
 
-        self._logger.info(
-            f'Mock locate server started with {len(self.objects)} objects'
-        )
+        self._logger.info(f'Mock locate server started with {len(self.objects)} objects')
 
     def goal_callback(self, goal_request):
         """Reject malformed goals, accept everything else."""
@@ -70,32 +70,19 @@ class MockLocateServer(Node):
                 self._logger.warning(f'Unknown target IRI: {iri}')
                 goal_handle.abort()
                 return result
-            detections.detections.append(self._detection(iri, entry, stamp))
+            detections.detections.append(
+                detection_msg(
+                    iri,
+                    self.frame_id,
+                    stamp,
+                    entry['position'],
+                    entry['orientation_xyzw'],
+                )
+            )
 
         result.detections = detections
         goal_handle.succeed()
         return result
-
-    def _detection(self, iri, entry, stamp):
-        detection = Detection3D()
-        detection.header.stamp = stamp
-        detection.header.frame_id = self.frame_id
-        detection.id = iri
-
-        hypothesis = ObjectHypothesisWithPose()
-        hypothesis.hypothesis.score = 1.0
-        position = entry['position']
-        orientation = entry['orientation_xyzw']
-        hypothesis.pose.pose.position.x = float(position[0])
-        hypothesis.pose.pose.position.y = float(position[1])
-        hypothesis.pose.pose.position.z = float(position[2])
-        hypothesis.pose.pose.orientation.x = float(orientation[0])
-        hypothesis.pose.pose.orientation.y = float(orientation[1])
-        hypothesis.pose.pose.orientation.z = float(orientation[2])
-        hypothesis.pose.pose.orientation.w = float(orientation[3])
-        detection.results.append(hypothesis)
-
-        return detection
 
 
 def main(args=None):

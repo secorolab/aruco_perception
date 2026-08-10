@@ -42,3 +42,41 @@ This node will detect ArUco markers in the camera image and publish their poses 
 ```bash
 ros2 run aruco_perception detect_objects_node
 ```
+
+### Object Pose Node
+
+Continuously reports the scene objects it can see, for a motion-spec model that subscribes to
+them. It broadcasts the same marker TFs as the detect node, and additionally publishes one
+`vision_msgs/Detection3DArray` per image where `detection.id` is the object's frame IRI.
+
+Which objects it looks for comes from the scene itself: it loads the generated
+`<model>.scenex.ld.json` and takes every frame whose local name is `aruco_<tag>`, so a body
+declared as
+
+```
+body cube {
+    frame aruco_12 { ... }
+}
+```
+
+is reported under its own IRI whenever marker 12 is seen.
+
+```bash
+ros2 run aruco_perception object_pose_node --ros-args \
+    -p scene_file:=<generation>/generated/model/<model>.scenex.ld.json \
+    -p result_frame:=base_link
+```
+
+`result_frame` must equal the `wrt:` frame of the world pose in the model. A detection that
+arrives in any other frame is not the quantity the model declared, and the subscriber drops it
+silently — check this first if perception is running and the robot does nothing.
+
+### Mock Object Pose Publisher
+
+The same message, streamed from a static YAML table instead of a camera, for running a model in
+simulation where there is no image pipeline.
+
+```bash
+ros2 run aruco_perception mock_object_pose_publisher --ros-args \
+    -p poses_file:=<path>/mock_poses.yml -p rate_hz:=10.0
+```

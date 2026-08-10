@@ -98,6 +98,8 @@ class DetectObjectsNode(Node):
             corners, ids, _ = self.detector.detectMarkers(gray)
             self._logger.info(f"Detected {len(corners)} markers: {ids.flatten() if ids is not None else 'None'}")
 
+            detected = []
+
             if ids is not None:
                 cv2.aruco.drawDetectedMarkers(frame, corners, ids)
 
@@ -148,6 +150,9 @@ class DetectObjectsNode(Node):
                     tf_msg.transform.rotation.w = float(quat_world[3])
 
                     self.tf_broadcaster.sendTransform(tf_msg)
+                    detected.append(int(detected_marker_id))
+
+            self.markers_detected(detected)
 
             debug_msg = Image()
             debug_msg.header = msg.header
@@ -157,6 +162,14 @@ class DetectObjectsNode(Node):
             debug_msg.data = frame.tobytes()
 
             self.debug_pub.publish(debug_msg)
+
+    def markers_detected(self, marker_ids):
+        """
+        React to the markers whose TF was just broadcast for this image.
+
+        Nothing to do while only rviz is watching; a subclass reporting poses to the runtime
+        needs to know what was seen *this* image rather than what the TF buffer still holds.
+        """
 
 def main(args=None):
     rclpy.init(args=args)
