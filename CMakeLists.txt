@@ -26,6 +26,7 @@ install(PROGRAMS
   scripts/mock_locate_server
   scripts/object_pose_node
   scripts/mock_object_pose_publisher
+  scripts/handle_pose_node
   DESTINATION lib/${PROJECT_NAME}
 )
 

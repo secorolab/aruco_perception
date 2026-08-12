@@ -75,6 +75,9 @@ class WorldPoseNode(Node):
         self.dist_coeffs = np.array(msg.d, dtype=np.float64)
 
     def image_callback(self, msg: Image):
+        if self.world_tf_published:
+            return
+
         if self.camera_matrix is None:
             self._logger.warning("Camera info not received yet, skipping")
             return
@@ -96,7 +99,7 @@ class WorldPoseNode(Node):
             ], dtype=np.float64)
 
             for i, detected_marker_id in enumerate(ids.flatten()):
-                if detected_marker_id == self.marker_id and not self.world_tf_published:
+                if detected_marker_id == self.marker_id:
                     img_points = corners[i][0].astype(np.float64)
                     ok, rvec, tvec = cv2.solvePnP(
                         obj_points, img_points,
