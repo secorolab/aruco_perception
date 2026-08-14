@@ -54,6 +54,12 @@ def _create_nodes(context, *args, **kwargs):
             parameters=[objects_params],
             output='screen',
         ),
+        Node(
+            package='aruco_perception',
+            executable='handle_pose_node',
+            name='handle_pose_node',
+            output='screen',
+        )
     ]
 
 
