@@ -52,10 +52,12 @@ class HandlePoseNode(Node):
         self.declare_parameter('handle_pose_topic', '/recognized_objects')
         self.declare_parameter('rate_hz', 15.0)
         self.declare_parameter('max_tf_age', 0.5)
+        self.declare_parameter('camera_frame', 'camera_color_optical_frame')
 
         self.table_anchor_frame = self._require_str('table_anchor_frame')
         self.handle_frame = self._require_str('handle_frame')
         self.max_tf_age = self.get_parameter('max_tf_age').value
+        self.camera_frame = self.get_parameter('camera_frame').value
 
         scene_file = self._require_str('scene_file')
         handle_iris = scene_frame_iris(scene_file).get(self.handle_frame, [])
@@ -177,7 +179,7 @@ class HandlePoseNode(Node):
             handle_pose.detections.append(
                 detection_msg(
                     self.handle_iri,
-                    self.table_anchor_frame,
+                    self.camera_frame,
                     stamp,
                     position,
                     orientation,

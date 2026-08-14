@@ -26,6 +26,7 @@ class WorldPoseNode(Node):
         self.declare_parameter('image_topic', '/camera/camera/color/image_raw')
         self.declare_parameter('camera_info_topic', '/camera/camera/color/camera_info')
         self.declare_parameter('camera_link_frame', 'camera_link')
+        self.declare_parameter('camera_frame', 'camera_color_optical_frame')
         self.declare_parameter('table_anchor_frame', 'table_anchor')
 
         self.declare_parameter('marker_dict', 'DICT_4X4_50')
@@ -53,6 +54,7 @@ class WorldPoseNode(Node):
         self.marker_size = self.get_parameter('marker_size').value
         self.marker_id = self.get_parameter('marker_id').value
         self.camera_link_frame = self.get_parameter('camera_link_frame').value
+        self.camera_frame = self.get_parameter('camera_frame').value
         self.table_anchor_frame = self.get_parameter('table_anchor_frame').value
         self.world_iri = world_iri
 
@@ -177,13 +179,15 @@ class WorldPoseNode(Node):
                         self.tf_static_broadcaster.sendTransform(tf_msg)
                         self.world_tf_published = True
 
+                        self._logger.info(f"Published world pose")
+
                     world_pose = Detection3DArray()
                     world_pose.header.stamp = stamp
                     world_pose.header.frame_id = self.table_anchor_frame
                     world_pose.detections.append(
                         detection_msg(
                             self.world_iri,
-                            self.table_anchor_frame,
+                            self.camera_frame,
                             stamp,
                             t_world,
                             quat_world,
