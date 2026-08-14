@@ -12,7 +12,7 @@ scene:
 
 world_marker:
   frame: table_anchor
-  iri: https://secorolab.github.io/models/demos/collab/scene/collab-kgraph/robot-table-body/table_anchor
+  iri: https://secorolab.github.io/models/scenes/admittance-arc-single-mjc/world_tree/robot-table-body/table_anchor
   marker_dict: DICT_4X4_50
   marker_size: 0.1
   marker_id: 0
@@ -20,3 +20,24 @@ world_marker:
 objects:
   marker_dict: DICT_4X4_50
   marker_size: 0.05
+
+tray:
+  handle_frame: aruco_1
+  marker_front:
+    id: 1
+    offset:
+      x: -0.065
+      y: 0.0
+      z: 0.02
+      roll: 0.0
+      pitch: 0.0
+      yaw: 0.0
+  marker_back:
+    id: 2
+    offset:
+      x: 0.0
+      y: 0.0
+      z: -0.22
+      roll: 0.0
+      pitch: 0.0
+      yaw: 0.0

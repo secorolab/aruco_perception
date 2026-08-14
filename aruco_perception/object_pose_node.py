@@ -3,17 +3,12 @@
 import rclpy
 from rclpy.time import Time
 
-from rdflib import Graph, Namespace
-from rdflib.namespace import RDF, split_uri
-
 from tf2_ros import TransformException
 
 from vision_msgs.msg import Detection3DArray
 
 from .detect_objects_node import DetectObjectsNode
-from .utils import detection_msg
-
-GEOM = Namespace('https://comp-rob2b.github.io/metamodels/geometry/structural-entities#')
+from .utils import detection_msg, scene_frame_iris
 
 
 def tag_frame_iris(scene_file, marker_prefix):
@@ -23,25 +18,23 @@ def tag_frame_iris(scene_file, marker_prefix):
     The scene is the only statement of which physical marker an object carries: a frame whose
     local name is '<prefix><tag>' says the object it belongs to wears that marker.
     """
-    graph = Graph()
-    graph.parse(scene_file, format='json-ld')
-
     tags = {}
-    for frame in sorted(graph.subjects(RDF.type, GEOM.Frame), key=str):
-        name = split_uri(frame)[1]
+    for name, iris in scene_frame_iris(scene_file).items():
         if not name.startswith(marker_prefix):
             continue
 
         suffix = name.removeprefix(marker_prefix)
         if not suffix.isdigit():
             raise ValueError(
-                f"frame '{frame}' names a marker tag that is not an integer: '{suffix}'"
+                f"frame '{iris[0]}' names a marker tag that is not an integer: '{suffix}'"
             )
 
         tag = int(suffix)
+        if len(iris) > 1:
+            raise ValueError(f"marker tag {tag} is claimed by more than one frame: {iris}")
         if tag in tags:
-            raise ValueError(f"marker tag {tag} is claimed by both '{tags[tag]}' and '{frame}'")
-        tags[tag] = str(frame)
+            raise ValueError(f"marker tag {tag} is claimed by both '{tags[tag]}' and '{iris[0]}'")
+        tags[tag] = iris[0]
 
     return tags
 

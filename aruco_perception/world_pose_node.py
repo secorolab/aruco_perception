@@ -33,7 +33,7 @@ class WorldPoseNode(Node):
         self.declare_parameter('marker_id', 0)
 
         self.declare_parameter('world_iri', '')
-        self.declare_parameter('world_pose_topic', '/perception/world_pose')
+        self.declare_parameter('world_pose_topic', '/recognized_objects')
 
         world_iri = self.get_parameter('world_iri').value
         if not world_iri:
