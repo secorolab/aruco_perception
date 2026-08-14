@@ -19,7 +19,7 @@ def _create_nodes(context, *args, **kwargs):
     config_path = LaunchConfiguration('config_path').perform(context)
     config = load_config(config_path)
 
-    camera = config['camera']
+    camera = config['static_camera']
     world_marker = config['world_marker']
 
     world_params = {
@@ -44,7 +44,7 @@ def _create_nodes(context, *args, **kwargs):
 
 def generate_launch_description():
     default_config_path = os.path.join(
-        get_package_share_directory('aruco_perception'), 'config', 'realsense_table_setup.yml'
+        get_package_share_directory('aruco_perception'), 'config', 'table_setup.yml'
     )
 
     realsense_launch = IncludeLaunchDescription(

@@ -19,7 +19,7 @@ def _create_nodes(context, *args, **kwargs):
     config_path = LaunchConfiguration('config_path').perform(context)
     config = load_config(config_path)
 
-    camera = config['camera']
+    camera = config['arm_camera']
     world_marker = config['world_marker']
     objects = config['objects']
 
@@ -34,7 +34,19 @@ def _create_nodes(context, *args, **kwargs):
         'scene_file': config['scene']['file_path'],
     }
 
+    kinova_vision_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(
+                get_package_share_directory('kinova_vision'),
+                'launch',
+                'kinova_vision.launch.py',
+            )
+        ),
+        launch_arguments={'device': camera['ip']}.items(),
+    )
+
     return [
+        kinova_vision_launch,
         Node(
             package='aruco_perception',
             executable='object_pose_node',
@@ -47,17 +59,7 @@ def _create_nodes(context, *args, **kwargs):
 
 def generate_launch_description():
     default_config_path = os.path.join(
-        get_package_share_directory('aruco_perception'), 'config', 'kinova_arm_setup.yml'
-    )
-
-    kinova_vision_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(
-                get_package_share_directory('kinova_vision'),
-                'launch',
-                'kinova_vision.launch.py',
-            )
-        )
+        get_package_share_directory('aruco_perception'), 'config', 'table_setup.yml'
     )
 
     return LaunchDescription([
@@ -66,6 +68,5 @@ def generate_launch_description():
             default_value=default_config_path,
             description='Path to the configuration file'
         ),
-        kinova_vision_launch,
         OpaqueFunction(function=_create_nodes),
     ])
