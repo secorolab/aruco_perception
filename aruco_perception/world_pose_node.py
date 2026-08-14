@@ -24,11 +24,11 @@ class WorldPoseNode(Node):
         self.declare_parameter('image_topic', '/camera/camera/color/image_raw')
         self.declare_parameter('camera_info_topic', '/camera/camera/color/camera_info')
         self.declare_parameter('camera_link_frame', 'camera_link')
+        self.declare_parameter('table_anchor_frame', 'table_anchor')
 
         self.declare_parameter('marker_dict', 'DICT_4X4_50')
         self.declare_parameter('marker_size', 0.1)
         self.declare_parameter('marker_id', 0)
-
 
         marker_dict = getattr(cv2.aruco, self.get_parameter('marker_dict').value, None)
         if marker_dict is None:
@@ -44,7 +44,7 @@ class WorldPoseNode(Node):
         self.marker_size = self.get_parameter('marker_size').value
         self.marker_id = self.get_parameter('marker_id').value
         self.camera_link_frame = self.get_parameter('camera_link_frame').value
-
+        self.table_anchor_frame = self.get_parameter('table_anchor_frame').value
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
 
@@ -147,7 +147,7 @@ class WorldPoseNode(Node):
 
                     tf_msg = TransformStamped()
                     tf_msg.header.stamp = self.get_clock().now().to_msg()
-                    tf_msg.header.frame_id = "world"
+                    tf_msg.header.frame_id = self.table_anchor_frame
                     tf_msg.child_frame_id = self.camera_link_frame
                     tf_msg.transform.translation.x = float(t_world[0])
                     tf_msg.transform.translation.y = float(t_world[1])

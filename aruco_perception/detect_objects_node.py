@@ -28,6 +28,7 @@ class DetectObjectsNode(Node):
 
 
         self.declare_parameter('world_marker_id', 0)
+        self.declare_parameter('table_anchor_frame', 'table_anchor')
 
         marker_dict = getattr(cv2.aruco, self.get_parameter('marker_dict').value, None)
         if marker_dict is None:
@@ -41,6 +42,7 @@ class DetectObjectsNode(Node):
         self.dist_coeffs = None
         self.marker_size = self.get_parameter('marker_size').value
         self.world_marker_id = self.get_parameter('world_marker_id').value
+        self.table_anchor_frame = self.get_parameter('table_anchor_frame').value
         self.T_world_cam = None
 
         self.image_sub = self.create_subscription(
@@ -81,9 +83,11 @@ class DetectObjectsNode(Node):
             if self.T_world_cam is None:
                 try:
                     tf_world_cam = self.tf_buffer.lookup_transform(
-                        'world', msg.header.frame_id, Time())
+                        self.table_anchor_frame, msg.header.frame_id, Time())
                 except TransformException:
-                    self._logger.warning("world -> camera tf not available yet, skipping frame")
+                    self._logger.warning(
+                        f"{self.table_anchor_frame} -> camera tf not available yet, skipping frame"
+                    )
                     return
 
                 t = tf_world_cam.transform.translation
@@ -139,7 +143,7 @@ class DetectObjectsNode(Node):
 
                     tf_msg = TransformStamped()
                     tf_msg.header.stamp = self.get_clock().now().to_msg()
-                    tf_msg.header.frame_id = "world"
+                    tf_msg.header.frame_id = self.table_anchor_frame
                     tf_msg.child_frame_id = f"marker_{detected_marker_id}"
                     tf_msg.transform.translation.x = float(t_world[0])
                     tf_msg.transform.translation.y = float(t_world[1])

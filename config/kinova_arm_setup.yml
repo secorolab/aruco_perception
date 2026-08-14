@@ -1,0 +1,16 @@
+camera:
+  image_topic: /camera/color/image_raw
+  camera_info_topic: /camera/color/camera_info
+
+scene:
+  file_path: src/scene-dsl/examples/generated/lab.scenex.json
+
+world_marker:
+  marker_frame: table_anchor
+  marker_dict: DICT_4X4_50
+  marker_size: 0.1
+  marker_id: 0
+
+objects:
+  marker_dict: DICT_4X4_50
+  marker_size: 0.05
