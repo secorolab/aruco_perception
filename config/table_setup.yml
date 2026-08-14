@@ -11,7 +11,8 @@ scene:
   file_path: src/scene-dsl/examples/generated/lab.scenex.json
 
 world_marker:
-  marker_frame: table_anchor
+  frame: table_anchor
+  iri: https://secorolab.github.io/models/demos/collab/scene/collab-kgraph/robot-table-body/table_anchor
   marker_dict: DICT_4X4_50
   marker_size: 0.1
   marker_id: 0

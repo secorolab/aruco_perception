@@ -25,10 +25,11 @@ def _create_nodes(context, *args, **kwargs):
     world_params = {
         'image_topic': camera['image_topic'],
         'camera_info_topic': camera['camera_info_topic'],
-        'table_anchor_frame': world_marker['marker_frame'],
+        'table_anchor_frame': world_marker['frame'],
         'marker_dict': world_marker['marker_dict'],
         'marker_size': world_marker['marker_size'],
         'marker_id': world_marker['marker_id'],
+        'world_iri': world_marker['iri'],
     }
 
     return [

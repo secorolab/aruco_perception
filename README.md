@@ -29,10 +29,14 @@ Or run separately.
 
 ### World Pose Localization Node
 
-This node will broadcast the ArUco marker's pose w.r.t. the camera as a static transform. Run it with:
+This node will broadcast the ArUco marker's pose w.r.t. the camera as a static transform, and
+additionally publish it once as a `vision_msgs/Detection3DArray` on `world_pose_topic`
+(default `/perception/world_pose`), where `detection.id` is the IRI given by the required
+`world_iri` parameter (see `world_marker.iri` in `config/table_setup.yml`). Run it with:
 
 ```bash
-ros2 run aruco_perception world_pose_node
+ros2 run aruco_perception world_pose_node --ros-args \
+    -p world_iri:=<the world frame's IRI>
 ```
 
 ### Detect Objects Node

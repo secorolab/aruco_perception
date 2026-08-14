@@ -29,8 +29,8 @@ def _create_nodes(context, *args, **kwargs):
         'marker_dict': objects['marker_dict'],
         'marker_size': objects['marker_size'],
         'world_marker_id': world_marker['marker_id'],
-        'table_anchor_frame': world_marker['marker_frame'],
-        'result_frame': world_marker['marker_frame'],
+        'table_anchor_frame': world_marker['frame'],
+        'result_frame': world_marker['frame'],
         'scene_file': config['scene']['file_path'],
     }
 

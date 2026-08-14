@@ -13,7 +13,9 @@ from tf2_ros import TransformException
 from tf2_ros.buffer import Buffer
 from tf2_ros.transform_listener import TransformListener
 
-from .utils import imgmsg_to_cv2
+from vision_msgs.msg import Detection3DArray
+
+from .utils import imgmsg_to_cv2, detection_msg
 
 class WorldPoseNode(Node):
     def __init__(self):
@@ -30,6 +32,13 @@ class WorldPoseNode(Node):
         self.declare_parameter('marker_size', 0.1)
         self.declare_parameter('marker_id', 0)
 
+        self.declare_parameter('world_iri', '')
+        self.declare_parameter('world_pose_topic', '/perception/world_pose')
+
+        world_iri = self.get_parameter('world_iri').value
+        if not world_iri:
+            raise ValueError('parameter world_iri is required')
+
         marker_dict = getattr(cv2.aruco, self.get_parameter('marker_dict').value, None)
         if marker_dict is None:
             raise ValueError(f"Invalid marker dictionary: {self.get_parameter('marker_dict').value}")
@@ -45,6 +54,8 @@ class WorldPoseNode(Node):
         self.marker_id = self.get_parameter('marker_id').value
         self.camera_link_frame = self.get_parameter('camera_link_frame').value
         self.table_anchor_frame = self.get_parameter('table_anchor_frame').value
+        self.world_iri = world_iri
+
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
 
@@ -67,6 +78,11 @@ class WorldPoseNode(Node):
             'debug_image',
             10
         )
+        self.world_pose_pub = self.create_publisher(
+            Detection3DArray,
+            self.get_parameter('world_pose_topic').value,
+            10,
+        )
 
         self._logger.info(f"Tf publisher node started, cv2 version: {cv2.__version__}")
 
@@ -75,8 +91,6 @@ class WorldPoseNode(Node):
         self.dist_coeffs = np.array(msg.d, dtype=np.float64)
 
     def image_callback(self, msg: Image):
-        if self.world_tf_published:
-            return
 
         if self.camera_matrix is None:
             self._logger.warning("Camera info not received yet, skipping")
@@ -145,22 +159,37 @@ class WorldPoseNode(Node):
                     t_world = T_world_link[0:3, 3]
                     quat_world = R.from_matrix(T_world_link[0:3, 0:3]).as_quat()
 
-                    tf_msg = TransformStamped()
-                    tf_msg.header.stamp = self.get_clock().now().to_msg()
-                    tf_msg.header.frame_id = self.table_anchor_frame
-                    tf_msg.child_frame_id = self.camera_link_frame
-                    tf_msg.transform.translation.x = float(t_world[0])
-                    tf_msg.transform.translation.y = float(t_world[1])
-                    tf_msg.transform.translation.z = float(t_world[2])
-                    tf_msg.transform.rotation.x = float(quat_world[0])
-                    tf_msg.transform.rotation.y = float(quat_world[1])
-                    tf_msg.transform.rotation.z = float(quat_world[2])
-                    tf_msg.transform.rotation.w = float(quat_world[3])
+                    stamp = self.get_clock().now().to_msg()
 
-                    self.tf_static_broadcaster.sendTransform(tf_msg)
-                    self.world_tf_published = True
+                    if not self.world_tf_published:
+                        tf_msg = TransformStamped()
+                        tf_msg.header.stamp = stamp
+                        tf_msg.header.frame_id = self.table_anchor_frame
+                        tf_msg.child_frame_id = self.camera_link_frame
+                        tf_msg.transform.translation.x = float(t_world[0])
+                        tf_msg.transform.translation.y = float(t_world[1])
+                        tf_msg.transform.translation.z = float(t_world[2])
+                        tf_msg.transform.rotation.x = float(quat_world[0])
+                        tf_msg.transform.rotation.y = float(quat_world[1])
+                        tf_msg.transform.rotation.z = float(quat_world[2])
+                        tf_msg.transform.rotation.w = float(quat_world[3])
 
-                    self._logger.info(f"Published world transform based on marker {self.marker_id}")
+                        self.tf_static_broadcaster.sendTransform(tf_msg)
+                        self.world_tf_published = True
+
+                    world_pose = Detection3DArray()
+                    world_pose.header.stamp = stamp
+                    world_pose.header.frame_id = self.table_anchor_frame
+                    world_pose.detections.append(
+                        detection_msg(
+                            self.world_iri,
+                            self.table_anchor_frame,
+                            stamp,
+                            t_world,
+                            quat_world,
+                        )
+                    )
+                    self.world_pose_pub.publish(world_pose)
 
         debug_msg = Image()
         debug_msg.header = msg.header
