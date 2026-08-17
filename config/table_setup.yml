@@ -18,6 +18,11 @@ frames:
     marker:
       marker_size: 0.1
       marker_id: 0
+  - frame: rk_anchor
+    iri: collab-scn:collab-kgraph/rk-table-body/rk_anchor
+    marker:
+      marker_size: 0.1
+      marker_id: 10
   - frame: robot_table_top
     iri: collab-scn:collab-kgraph/robot-table-body/table_top
   - frame: base_link

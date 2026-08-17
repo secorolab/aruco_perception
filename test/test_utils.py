@@ -1,10 +1,13 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 from builtin_interfaces.msg import Time
+from rclpy.time import Time as RclpyTime
 from scipy.spatial.transform import RigidTransform
 
-from aruco_perception.object_pose_node import transform_stamped
+from aruco_perception.detect_objects_node import observation_has_priority
+from aruco_perception.object_pose_node import ObjectPoseNode, transform_stamped
 
 from aruco_perception.utils import (
     detection_msg,
@@ -14,6 +17,17 @@ from aruco_perception.utils import (
     load_setup,
     transform_between_frames,
 )
+
+
+def test_sensor_order_prioritizes_fresh_observations():
+    sensors = {
+        'static_camera': {'visible': {1}, 'seen_at_ns': 1_000_000_000},
+        'arm_camera': {'visible': {1}, 'seen_at_ns': 1_200_000_000},
+    }
+
+    assert observation_has_priority(sensors, 'static_camera', 1, 1_200_000_000, 500_000_000)
+    assert not observation_has_priority(sensors, 'arm_camera', 1, 1_200_000_000, 500_000_000)
+    assert observation_has_priority(sensors, 'arm_camera', 1, 1_600_000_000, 500_000_000)
 
 
 def test_detection_pose_is_available_to_both_supported_consumers():
@@ -40,6 +54,35 @@ def test_rdf_frame_pose_converts_to_static_tf():
     assert msg.child_frame_id == 'robot_table_top'
     assert msg.transform.translation.z == 3.0
     assert msg.transform.rotation.w == 1.0
+
+
+def test_dynamic_object_is_published_as_detection_and_tf():
+    pose = RigidTransform.from_matrix(np.eye(4))
+    detections = []
+    transforms = []
+    node = SimpleNamespace(
+        get_clock=lambda: SimpleNamespace(now=lambda: RclpyTime(seconds=1.0)),
+        table_anchor_frame='table_anchor',
+        objects=[
+            {
+                'name': 'drawer_handle_obj',
+                'frame': 'drawer_handle',
+                'iri': 'urn:test:drawer',
+                'source': None,
+                'dynamic': True,
+            }
+        ],
+        _dynamic_pose=lambda source, now: pose,
+        objects_pub=SimpleNamespace(publish=detections.append),
+        markers_pub=None,
+        tf_broadcaster=SimpleNamespace(sendTransform=transforms.append),
+    )
+
+    ObjectPoseNode.timer_callback(node)
+
+    assert len(detections[0].detections) == 1
+    assert transforms[0].header.frame_id == 'table_anchor'
+    assert transforms[0].child_frame_id == 'drawer_handle'
 
 
 def test_collab_model_frames_resolve_in_the_configured_reference_frame():

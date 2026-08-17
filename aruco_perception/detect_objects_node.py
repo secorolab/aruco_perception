@@ -1,3 +1,5 @@
+from functools import partial
+
 import cv2
 import numpy as np
 import rclpy
@@ -14,23 +16,41 @@ from tf2_ros.transform_listener import TransformListener
 from .utils import frame_by_name, imgmsg_to_cv2, load_setup
 
 
+def observation_has_priority(sensors, sensor_name, marker_id, now_ns, max_age_ns):
+    """Return whether this sensor is the first fresh source for a marker."""
+    for name, state in sensors.items():
+        if name == sensor_name:
+            return True
+        if marker_id in state['visible'] and now_ns - state['seen_at_ns'] <= max_age_ns:
+            return False
+    raise ValueError(f"unknown sensor '{sensor_name}'")
+
+
 class DetectObjectsNode(Node):
     def __init__(self, node_name='detect_objects_node'):
         super().__init__(node_name)
         self._logger = self.get_logger()
 
         self.declare_parameter('config_path', '')
-        self.declare_parameter('sensor', 'arm_camera')
+        self.declare_parameter('max_tf_age', 0.5)
         config_path = self.get_parameter('config_path').value
         if not config_path:
             raise ValueError('parameter config_path is required')
 
         self.config = load_setup(config_path)
-        sensor_name = self.get_parameter('sensor').value
-        try:
-            camera = self.config['sensors'][sensor_name]
-        except KeyError as error:
-            raise ValueError(f"table setup has no sensor '{sensor_name}'") from error
+        self.max_tf_age = float(self.get_parameter('max_tf_age').value)
+        configured_sensors = self.config.get('sensors', {})
+        if not configured_sensors:
+            raise ValueError('table setup must declare at least one sensor')
+        self.sensors = {
+            name: {
+                'camera_matrix': None,
+                'dist_coeffs': None,
+                'visible': set(),
+                'seen_at_ns': 0,
+            }
+            for name in configured_sensors
+        }
 
         self.table_anchor_frame = self.config['ref_frame']
         ref_frame = frame_by_name(self.config, self.table_anchor_frame)
@@ -69,29 +89,45 @@ class DetectObjectsNode(Node):
             cv2.aruco.DetectorParameters(),
         )
 
-        self.camera_matrix = None
-        self.dist_coeffs = None
+        self.image_subs = []
+        self.camera_info_subs = []
+        for sensor_name, camera in configured_sensors.items():
+            self.image_subs.append(
+                self.create_subscription(
+                    Image,
+                    camera['image_topic'],
+                    partial(self.image_callback, sensor_name=sensor_name),
+                    10,
+                )
+            )
+            self.camera_info_subs.append(
+                self.create_subscription(
+                    CameraInfo,
+                    camera['camera_info_topic'],
+                    partial(self.camera_info_callback, sensor_name=sensor_name),
+                    10,
+                )
+            )
 
-        self.image_sub = self.create_subscription(
-            Image, camera['image_topic'], self.image_callback, 10
-        )
-        self.camera_info_sub = self.create_subscription(
-            CameraInfo, camera['camera_info_topic'], self.camera_info_callback, 10
-        )
         self.tf_broadcaster = TransformBroadcaster(self)
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
         self.debug_pub = self.create_publisher(Image, 'debug_image_objects', 10)
 
-        self._logger.info(f"Detect Objects node started for sensor '{sensor_name}'")
+        self._logger.info(
+            f"Detect Objects node started for sensors: {', '.join(self.sensors)}"
+        )
 
-    def camera_info_callback(self, msg):
-        self.camera_matrix = np.array(msg.k, dtype=np.float64).reshape(3, 3)
-        self.dist_coeffs = np.array(msg.d, dtype=np.float64)
+    def camera_info_callback(self, msg, sensor_name):
+        sensor = self.sensors[sensor_name]
+        sensor['camera_matrix'] = np.array(msg.k, dtype=np.float64).reshape(3, 3)
+        sensor['dist_coeffs'] = np.array(msg.d, dtype=np.float64)
 
-    def image_callback(self, msg: Image):
-        if self.camera_matrix is None:
-            self._logger.warning('Camera info not received yet, skipping')
+    def image_callback(self, msg: Image, sensor_name):
+        sensor = self.sensors[sensor_name]
+        camera_matrix = sensor['camera_matrix']
+        if camera_matrix is None:
+            self._logger.warning(f"Camera info for '{sensor_name}' not received yet, skipping")
             return
 
         try:
@@ -100,7 +136,8 @@ class DetectObjectsNode(Node):
             )
         except TransformException:
             self._logger.warning(
-                f'{self.table_anchor_frame} -> camera tf not available yet, skipping frame'
+                f'{self.table_anchor_frame} -> {msg.header.frame_id} tf not available yet, '
+                f"skipping '{sensor_name}' frame"
             )
             return
 
@@ -113,7 +150,7 @@ class DetectObjectsNode(Node):
         frame = imgmsg_to_cv2(msg)
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         corners, ids, _ = self.detector.detectMarkers(gray)
-        detected = []
+        candidates = []
 
         if ids is not None:
             cv2.aruco.drawDetectedMarkers(frame, corners, ids)
@@ -133,12 +170,11 @@ class DetectObjectsNode(Node):
                     ],
                     dtype=np.float64,
                 )
-                img_points = corners[i][0].astype(np.float64)
                 ok, rvec, tvec = cv2.solvePnP(
                     obj_points,
-                    img_points,
-                    self.camera_matrix,
-                    self.dist_coeffs,
+                    corners[i][0].astype(np.float64),
+                    camera_matrix,
+                    sensor['dist_coeffs'],
                     flags=cv2.SOLVEPNP_IPPE_SQUARE,
                 )
                 if not ok:
@@ -146,8 +182,8 @@ class DetectObjectsNode(Node):
 
                 cv2.drawFrameAxes(
                     frame,
-                    self.camera_matrix,
-                    self.dist_coeffs,
+                    camera_matrix,
+                    sensor['dist_coeffs'],
                     rvec,
                     tvec,
                     marker_size * 0.5,
@@ -157,22 +193,39 @@ class DetectObjectsNode(Node):
                 T_cam_marker[0:3, 0:3] = R_cam_marker
                 T_cam_marker[0:3, 3] = tvec.reshape(3)
                 T_world_marker = T_world_cam @ T_cam_marker
-                t_world = T_world_marker[0:3, 3]
-                quat_world = R.from_matrix(T_world_marker[0:3, 0:3]).as_quat()
+                candidates.append(
+                    (
+                        marker_id,
+                        T_world_marker[0:3, 3],
+                        R.from_matrix(T_world_marker[0:3, 0:3]).as_quat(),
+                    )
+                )
 
-                tf_msg = TransformStamped()
-                tf_msg.header.stamp = self.get_clock().now().to_msg()
-                tf_msg.header.frame_id = self.table_anchor_frame
-                tf_msg.child_frame_id = f'marker_{marker_id}'
-                tf_msg.transform.translation.x = float(t_world[0])
-                tf_msg.transform.translation.y = float(t_world[1])
-                tf_msg.transform.translation.z = float(t_world[2])
-                tf_msg.transform.rotation.x = float(quat_world[0])
-                tf_msg.transform.rotation.y = float(quat_world[1])
-                tf_msg.transform.rotation.z = float(quat_world[2])
-                tf_msg.transform.rotation.w = float(quat_world[3])
-                self.tf_broadcaster.sendTransform(tf_msg)
-                detected.append(marker_id)
+        now = self.get_clock().now()
+        sensor['visible'] = {marker_id for marker_id, _, _ in candidates}
+        sensor['seen_at_ns'] = now.nanoseconds
+        detected = []
+        max_age_ns = int(self.max_tf_age * 1e9)
+
+        for marker_id, translation, rotation in candidates:
+            if not observation_has_priority(
+                self.sensors, sensor_name, marker_id, now.nanoseconds, max_age_ns
+            ):
+                continue
+
+            tf_msg = TransformStamped()
+            tf_msg.header.stamp = now.to_msg()
+            tf_msg.header.frame_id = self.table_anchor_frame
+            tf_msg.child_frame_id = f'marker_{marker_id}'
+            tf_msg.transform.translation.x = float(translation[0])
+            tf_msg.transform.translation.y = float(translation[1])
+            tf_msg.transform.translation.z = float(translation[2])
+            tf_msg.transform.rotation.x = float(rotation[0])
+            tf_msg.transform.rotation.y = float(rotation[1])
+            tf_msg.transform.rotation.z = float(rotation[2])
+            tf_msg.transform.rotation.w = float(rotation[3])
+            self.tf_broadcaster.sendTransform(tf_msg)
+            detected.append(marker_id)
 
         self.markers_detected(detected)
 

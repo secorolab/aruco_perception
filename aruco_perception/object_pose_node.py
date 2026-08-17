@@ -70,10 +70,8 @@ class ObjectPoseNode(DetectObjectsNode):
 
         self.declare_parameter('objects_topic', '/recognized_objects')
         self.declare_parameter('rate_hz', 2.0)
-        self.declare_parameter('max_tf_age', 0.5)
         self.declare_parameter('publish_markers', False)
 
-        self.max_tf_age = float(self.get_parameter('max_tf_age').value)
         graph = load_scene_graph(self.config)
         ref_spec = frame_by_name(self.config, self.table_anchor_frame)
         ref_iri = expand_iri(graph, ref_spec['iri'])
@@ -124,6 +122,7 @@ class ObjectPoseNode(DetectObjectsNode):
             objects.append(
                 {
                     'name': configured_object['name'],
+                    'frame': frame['frame'],
                     'iri': object_iri,
                     'source': source,
                     'dynamic': bool(fixed),
@@ -185,6 +184,12 @@ class ObjectPoseNode(DetectObjectsNode):
             )
             detections.detections.append(detection)
             published.append((configured_object, detection))
+            if configured_object['dynamic']:
+                self.tf_broadcaster.sendTransform(
+                    transform_stamped(
+                        self.table_anchor_frame, configured_object['frame'], stamp, pose
+                    )
+                )
 
         self.objects_pub.publish(detections)
         if self.markers_pub is not None:
