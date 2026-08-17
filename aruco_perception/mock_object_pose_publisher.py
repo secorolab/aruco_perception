@@ -19,7 +19,7 @@ class MockObjectPosePublisher(Node):
         self._logger = self.get_logger()
 
         self.declare_parameter('poses_file', '')
-        self.declare_parameter('objects_topic', '/perception/objects')
+        self.declare_parameter('objects_topic', '/recognized_objects')
         self.declare_parameter('rate_hz', 10.0)
 
         poses_file = self.get_parameter('poses_file').value

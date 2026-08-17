@@ -1,43 +1,64 @@
-static_camera:
-  image_topic: /camera/camera/color/image_raw
-  camera_info_topic: /camera/camera/color/camera_info
+sensors:
+  static_camera:
+    image_topic: /camera/camera/color/image_raw
+    camera_info_topic: /camera/camera/color/camera_info
+  arm_camera:
+    ip: 192.168.1.12
+    image_topic: /camera/color/image_raw
+    camera_info_topic: /camera/color/camera_info
 
-arm_camera:
-  ip: 192.168.1.10
-  image_topic: /camera/color/image_raw
-  camera_info_topic: /camera/color/camera_info
+model:
+  path_type: ros
+  package: bdd_collab_bhv_cpp
+  path: models/collab/collab.scenex
 
-scene:
-  file_path: src/scene-dsl/examples/generated/lab.scenex.json
+frames:
+  - frame: table_anchor
+    iri: collab-scn:collab-kgraph/robot-table-body/table_anchor
+    marker:
+      marker_size: 0.1
+      marker_id: 0
+  - frame: robot_table_top
+    iri: collab-scn:collab-kgraph/robot-table-body/table_top
+  - frame: base_link
+    iri: collab-scn:collab-kgraph/robot-table-body/arm-mount
+  - frame: rk_table_top
+    iri: collab-scn:collab-kgraph/rk-table-body/work_surface
+  - frame: drawer_handle
+    iri: collab-scn:collab-kgraph/drawer-body/drawer-handle
+    fixed:
+      - wrt: marker_handle
+        x: -0.065
+        y: 0.0
+        z: 0.02
+        roll: 0.0
+        pitch: 0.0
+        yaw: 0.0
+      - wrt: marker_back
+        x: 0.0
+        y: 0.0
+        z: -0.22
+        roll: 0.0
+        pitch: 0.0
+        yaw: 0.0
+  - frame: marker_handle
+    marker:
+      marker_size: 0.05
+      marker_id: 1
+  - frame: marker_back
+    marker:
+      marker_size: 0.05
+      marker_id: 2
 
-world_marker:
-  frame: table_anchor
-  iri: https://secorolab.github.io/models/scenes/admittance-arc-single-mjc/world_tree/robot-table-body/table_anchor
-  marker_dict: DICT_4X4_50
-  marker_size: 0.1
-  marker_id: 0
+ref_frame: table_anchor
 
 objects:
-  marker_dict: DICT_4X4_50
-  marker_size: 0.05
-
-tray:
-  handle_frame: aruco_1
-  marker_front:
-    id: 1
-    offset:
-      x: -0.065
-      y: 0.0
-      z: 0.02
-      roll: 0.0
-      pitch: 0.0
-      yaw: 0.0
-  marker_back:
-    id: 2
-    offset:
-      x: 0.0
-      y: 0.0
-      z: -0.22
-      roll: 0.0
-      pitch: 0.0
-      yaw: 0.0
+  - name: drawer_handle_obj
+    frame: drawer_handle
+    iri: collab-scn:drawer
+  - name: robot_table_obj
+    frame: robot_table_top
+    iri: collab-scn:robot-ws
+  - name: rk_table_obj
+    frame: rk_table_top
+    iri: collab-scn:wall-ws

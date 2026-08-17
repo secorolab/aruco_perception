@@ -1,0 +1,42 @@
+launch:
+  - arg:
+      name: config_path
+      default: "$(find-pkg-share aruco_perception)/config/table_setup.yml"
+      description: "Path to the table setup configuration"
+
+  - arg:
+      name: camera
+      default: static_camera
+      description: "Sensor key used for object-marker detection"
+
+  - arg:
+      name: publish_markers
+      default: "false"
+      description: "Publish RViz arrows on /recognized_object_markers"
+
+  - include:
+      file: "$(find-pkg-share realsense2_camera)/launch/rs_launch.py"
+
+  - node:
+      pkg: aruco_perception
+      exec: world_pose_node
+      name: world_pose_node
+      output: screen
+      param:
+        - name: config_path
+          value: "$(var config_path)"
+
+  - node:
+      pkg: aruco_perception
+      exec: object_pose_node
+      name: object_pose_node
+      namespace: "$(var camera)"
+      output: screen
+      param:
+        - name: config_path
+          value: "$(var config_path)"
+        - name: sensor
+          value: "$(var camera)"
+        - name: publish_markers
+          value: "$(var publish_markers)"
+          type: bool

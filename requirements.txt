@@ -2,3 +2,7 @@ numpy >= 2.0.0
 scipy
 opencv-python >= 5.0.0
 opencv-contrib-python >= 5.0.0
+PyYAML
+rdflib
+rdf-utils
+scene-dsl
