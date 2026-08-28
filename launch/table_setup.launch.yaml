@@ -7,15 +7,46 @@ launch:
   - arg:
       name: max_tf_age
       default: "0.5"
-      description: "Freshness window for marker poses and sensor priority"
+      description: "Freshness window for camera poses, marker poses, and sensor priority"
 
   - arg:
       name: publish_markers
       default: "false"
       description: "Publish RViz arrows on /recognized_object_markers"
 
+  - arg:
+      name: robot_table_camera_serial
+      default: "_336222301119"
+      description: "Serial number of the robot-table camera"
+
+  - arg:
+      name: rk_table_camera_serial
+      default: "_230322273236"
+      description: "Serial number of the RK-table camera"
+
   - include:
       file: "$(find-pkg-share realsense2_camera)/launch/rs_launch.py"
+      arg:
+        - name: serial_no
+          value: "$(var robot_table_camera_serial)"
+        - name: camera_namespace
+          value: "cameras"
+        - name: camera_name
+          value: "robot_table_camera"
+        - name: enable_depth
+          value: "false"
+
+  - include:
+      file: "$(find-pkg-share realsense2_camera)/launch/rs_launch.py"
+      arg:
+        - name: serial_no
+          value: "$(var rk_table_camera_serial)"
+        - name: camera_namespace
+          value: "cameras"
+        - name: camera_name
+          value: "rk_table_camera"
+        - name: enable_depth
+          value: "false"
 
   - node:
       pkg: aruco_perception

@@ -1,79 +1,90 @@
+from functools import partial
+
 import cv2
 import numpy as np
 import rclpy
+from geometry_msgs.msg import TransformStamped
 from rclpy.node import Node
 from rclpy.time import Time
 from scipy.spatial.transform import Rotation as R
-
-from geometry_msgs.msg import TransformStamped
 from sensor_msgs.msg import CameraInfo, Image
-from tf2_ros import TransformException
+from tf2_ros import TransformBroadcaster, TransformException
 from tf2_ros.buffer import Buffer
-from tf2_ros.static_transform_broadcaster import StaticTransformBroadcaster
 from tf2_ros.transform_listener import TransformListener
 
-from .utils import frame_by_name, imgmsg_to_cv2, load_setup
+from .utils import anchored_sensor_specs, imgmsg_to_cv2, load_setup
 
 
 class WorldPoseNode(Node):
-    """Use the reference marker once to anchor the static camera in TF."""
+    """Continuously place anchored cameras in TF while their markers are visible."""
 
     def __init__(self):
-        super().__init__('world_pose_node')
+        super().__init__("world_pose_node")
         self._logger = self.get_logger()
 
-        self.declare_parameter('config_path', '')
-        self.declare_parameter('camera_link_frame', 'camera_link')
-        config_path = self.get_parameter('config_path').value
+        self.declare_parameter("config_path", "")
+        config_path = self.get_parameter("config_path").value
         if not config_path:
-            raise ValueError('parameter config_path is required')
+            raise ValueError("parameter config_path is required")
 
         config = load_setup(config_path)
-        camera = config['sensors']['static_camera']
-        self.table_anchor_frame = config['ref_frame']
-        ref_frame = frame_by_name(config, self.table_anchor_frame)
-        try:
-            marker = ref_frame['marker']
-            self.marker_size = float(marker['marker_size'])
-            self.marker_id = int(marker['marker_id'])
-        except KeyError as error:
-            raise ValueError(
-                f"reference frame '{self.table_anchor_frame}' must declare a marker"
-            ) from error
+        configured_sensors = anchored_sensor_specs(config)
 
-        marker_dict_name = config.get('marker_dict', 'DICT_4X4_50')
+        marker_dict_name = config.get("marker_dict", "DICT_4X4_50")
         marker_dict = getattr(cv2.aruco, marker_dict_name, None)
         if marker_dict is None:
-            raise ValueError(f'Invalid marker dictionary: {marker_dict_name}')
+            raise ValueError(f"Invalid marker dictionary: {marker_dict_name}")
         self.detector = cv2.aruco.ArucoDetector(
             cv2.aruco.getPredefinedDictionary(marker_dict),
             cv2.aruco.DetectorParameters(),
         )
 
-        self.camera_matrix = None
-        self.dist_coeffs = None
-        self.world_tf_published = False
-        self.camera_link_frame = self.get_parameter('camera_link_frame').value
+        self.sensors = {
+            name: {
+                **sensor,
+                "camera_matrix": None,
+                "dist_coeffs": None,
+            }
+            for name, sensor in configured_sensors.items()
+        }
 
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
-        self.image_sub = self.create_subscription(
-            Image, camera['image_topic'], self.image_callback, 10
+        self.image_subs = [
+            self.create_subscription(
+                Image,
+                sensor["image_topic"],
+                partial(self.image_callback, sensor_name=name),
+                10,
+            )
+            for name, sensor in configured_sensors.items()
+        ]
+        self.camera_info_subs = [
+            self.create_subscription(
+                CameraInfo,
+                sensor["camera_info_topic"],
+                partial(self.camera_info_callback, sensor_name=name),
+                10,
+            )
+            for name, sensor in configured_sensors.items()
+        ]
+        self.tf_broadcaster = TransformBroadcaster(self)
+        self.debug_pub = self.create_publisher(Image, "debug_image", 10)
+        self._logger.info(
+            f"World pose node started for anchored sensors: {', '.join(self.sensors)}"
         )
-        self.camera_info_sub = self.create_subscription(
-            CameraInfo, camera['camera_info_topic'], self.camera_info_callback, 10
-        )
-        self.tf_static_broadcaster = StaticTransformBroadcaster(self)
-        self.debug_pub = self.create_publisher(Image, 'debug_image', 10)
-        self._logger.info(f'World pose node started, cv2 version: {cv2.__version__}')
 
-    def camera_info_callback(self, msg):
-        self.camera_matrix = np.array(msg.k, dtype=np.float64).reshape(3, 3)
-        self.dist_coeffs = np.array(msg.d, dtype=np.float64)
+    def camera_info_callback(self, msg, sensor_name):
+        sensor = self.sensors[sensor_name]
+        sensor["camera_matrix"] = np.array(msg.k, dtype=np.float64).reshape(3, 3)
+        sensor["dist_coeffs"] = np.array(msg.d, dtype=np.float64)
 
-    def image_callback(self, msg: Image):
-        if self.camera_matrix is None:
-            self._logger.warning('Camera info not received yet, skipping')
+    def image_callback(self, msg: Image, sensor_name):
+        sensor = self.sensors[sensor_name]
+        if sensor["camera_matrix"] is None:
+            self._logger.warning(
+                f"Camera info for '{sensor_name}' not received yet, skipping"
+            )
             return
 
         frame = imgmsg_to_cv2(msg)
@@ -82,7 +93,7 @@ class WorldPoseNode(Node):
 
         if ids is not None:
             cv2.aruco.drawDetectedMarkers(frame, corners, ids)
-            half = self.marker_size / 2.0
+            half = sensor["marker_size"] / 2.0
             obj_points = np.array(
                 [
                     [-half, half, 0],
@@ -94,14 +105,14 @@ class WorldPoseNode(Node):
             )
 
             for i, detected_marker_id in enumerate(ids.flatten()):
-                if detected_marker_id != self.marker_id:
+                if detected_marker_id != sensor["marker_id"]:
                     continue
 
                 ok, rvec, tvec = cv2.solvePnP(
                     obj_points,
                     corners[i][0].astype(np.float64),
-                    self.camera_matrix,
-                    self.dist_coeffs,
+                    sensor["camera_matrix"],
+                    sensor["dist_coeffs"],
                     flags=cv2.SOLVEPNP_IPPE_SQUARE,
                 )
                 if not ok:
@@ -109,11 +120,11 @@ class WorldPoseNode(Node):
 
                 cv2.drawFrameAxes(
                     frame,
-                    self.camera_matrix,
-                    self.dist_coeffs,
+                    sensor["camera_matrix"],
+                    sensor["dist_coeffs"],
                     rvec,
                     tvec,
-                    self.marker_size * 0.5,
+                    sensor["marker_size"] * 0.5,
                 )
                 R_cam_marker, _ = cv2.Rodrigues(rvec)
                 T_cam_marker = np.eye(4)
@@ -124,12 +135,12 @@ class WorldPoseNode(Node):
                 optical_frame = msg.header.frame_id
                 try:
                     tf_optical_link = self.tf_buffer.lookup_transform(
-                        optical_frame, self.camera_link_frame, Time()
+                        optical_frame, sensor["camera_link_frame"], Time()
                     )
                 except TransformException:
                     self._logger.warning(
-                        f'{optical_frame} -> {self.camera_link_frame} tf not available yet, '
-                        'skipping world publish'
+                        f"{optical_frame} -> {sensor['camera_link_frame']} tf not "
+                        f"available yet, skipping '{sensor_name}' publish"
                     )
                     continue
 
@@ -148,27 +159,25 @@ class WorldPoseNode(Node):
                 t_world = T_world_link[0:3, 3]
                 quat_world = R.from_matrix(T_world_link[0:3, 0:3]).as_quat()
 
-                if not self.world_tf_published:
-                    tf_msg = TransformStamped()
-                    tf_msg.header.stamp = self.get_clock().now().to_msg()
-                    tf_msg.header.frame_id = self.table_anchor_frame
-                    tf_msg.child_frame_id = self.camera_link_frame
-                    tf_msg.transform.translation.x = float(t_world[0])
-                    tf_msg.transform.translation.y = float(t_world[1])
-                    tf_msg.transform.translation.z = float(t_world[2])
-                    tf_msg.transform.rotation.x = float(quat_world[0])
-                    tf_msg.transform.rotation.y = float(quat_world[1])
-                    tf_msg.transform.rotation.z = float(quat_world[2])
-                    tf_msg.transform.rotation.w = float(quat_world[3])
-                    self.tf_static_broadcaster.sendTransform(tf_msg)
-                    self.world_tf_published = True
-                    self._logger.info('Published world pose')
+                tf_msg = TransformStamped()
+                tf_msg.header.stamp = self.get_clock().now().to_msg()
+                tf_msg.header.frame_id = sensor["anchor_frame"]
+                tf_msg.child_frame_id = sensor["camera_link_frame"]
+                tf_msg.transform.translation.x = float(t_world[0])
+                tf_msg.transform.translation.y = float(t_world[1])
+                tf_msg.transform.translation.z = float(t_world[2])
+                tf_msg.transform.rotation.x = float(quat_world[0])
+                tf_msg.transform.rotation.y = float(quat_world[1])
+                tf_msg.transform.rotation.z = float(quat_world[2])
+                tf_msg.transform.rotation.w = float(quat_world[3])
+                self.tf_broadcaster.sendTransform(tf_msg)
+                break
 
         debug_msg = Image()
         debug_msg.header = msg.header
         debug_msg.height = frame.shape[0]
         debug_msg.width = frame.shape[1]
-        debug_msg.encoding = 'bgr8'
+        debug_msg.encoding = "bgr8"
         debug_msg.data = frame.tobytes()
         self.debug_pub.publish(debug_msg)
 
@@ -182,8 +191,8 @@ def main(args=None):
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        rclpy.try_shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

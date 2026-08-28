@@ -2,16 +2,14 @@
 
 import numpy as np
 import rclpy
+from geometry_msgs.msg import TransformStamped
 from rclpy.node import Node
 from rclpy.parameter import Parameter
 from rclpy.time import Time
 from scipy.spatial.transform import Rotation as R
-
-from geometry_msgs.msg import TransformStamped
 from tf2_ros import TransformBroadcaster, TransformException
 from tf2_ros.buffer import Buffer
 from tf2_ros.transform_listener import TransformListener
-
 from vision_msgs.msg import Detection3DArray
 
 from .utils import detection_msg, scene_frame_iris
@@ -20,7 +18,7 @@ from .utils import detection_msg, scene_frame_iris
 def offset_matrix(x, y, z, roll, pitch, yaw):
     """Build the rigid marker -> handle transform from a translation + rpy offset."""
     matrix = np.eye(4)
-    matrix[0:3, 0:3] = R.from_euler('xyz', [roll, pitch, yaw]).as_matrix()
+    matrix[0:3, 0:3] = R.from_euler("xyz", [roll, pitch, yaw]).as_matrix()
     matrix[0:3, 3] = [x, y, z]
     return matrix
 
@@ -37,29 +35,29 @@ class HandlePoseNode(Node):
     """
 
     def __init__(self):
-        super().__init__('handle_pose_node')
+        super().__init__("handle_pose_node")
 
         self._logger = self.get_logger()
 
-        self.declare_parameter('table_anchor_frame', '')
-        self.declare_parameter('handle_frame', '')
-        self.declare_parameter('scene_file', '')
-        self.declare_parameter('marker_front_id', -1)
-        self.declare_parameter('marker_front_offset', Parameter.Type.DOUBLE_ARRAY)
-        self.declare_parameter('marker_back_id', -1)
-        self.declare_parameter('marker_back_offset', Parameter.Type.DOUBLE_ARRAY)
+        self.declare_parameter("table_anchor_frame", "")
+        self.declare_parameter("handle_frame", "")
+        self.declare_parameter("scene_file", "")
+        self.declare_parameter("marker_front_id", -1)
+        self.declare_parameter("marker_front_offset", Parameter.Type.DOUBLE_ARRAY)
+        self.declare_parameter("marker_back_id", -1)
+        self.declare_parameter("marker_back_offset", Parameter.Type.DOUBLE_ARRAY)
 
-        self.declare_parameter('handle_pose_topic', '/recognized_objects')
-        self.declare_parameter('rate_hz', 15.0)
-        self.declare_parameter('max_tf_age', 0.5)
-        self.declare_parameter('camera_frame', 'camera_color_optical_frame')
+        self.declare_parameter("handle_pose_topic", "/recognized_objects")
+        self.declare_parameter("rate_hz", 15.0)
+        self.declare_parameter("max_tf_age", 0.5)
+        self.declare_parameter("camera_frame", "camera_color_optical_frame")
 
-        self.table_anchor_frame = self._require_str('table_anchor_frame')
-        self.handle_frame = self._require_str('handle_frame')
-        self.max_tf_age = self.get_parameter('max_tf_age').value
-        self.camera_frame = self.get_parameter('camera_frame').value
+        self.table_anchor_frame = self._require_str("table_anchor_frame")
+        self.handle_frame = self._require_str("handle_frame")
+        self.max_tf_age = self.get_parameter("max_tf_age").value
+        self.camera_frame = self.get_parameter("camera_frame").value
 
-        scene_file = self._require_str('scene_file')
+        scene_file = self._require_str("scene_file")
         handle_iris = scene_frame_iris(scene_file).get(self.handle_frame, [])
         if len(handle_iris) == 0:
             raise ValueError(
@@ -76,12 +74,12 @@ class HandlePoseNode(Node):
         # Ordered by priority: the marker closest to the handle wins when both are visible.
         self.tray_markers = [
             (
-                self._require_marker_id('marker_front_id'),
-                self._require_offset('marker_front_offset'),
+                self._require_marker_id("marker_front_id"),
+                self._require_offset("marker_front_offset"),
             ),
             (
-                self._require_marker_id('marker_back_id'),
-                self._require_offset('marker_back_offset'),
+                self._require_marker_id("marker_back_id"),
+                self._require_offset("marker_back_offset"),
             ),
         ]
 
@@ -91,17 +89,17 @@ class HandlePoseNode(Node):
 
         self.handle_pose_pub = self.create_publisher(
             Detection3DArray,
-            self.get_parameter('handle_pose_topic').value,
+            self.get_parameter("handle_pose_topic").value,
             10,
         )
 
-        rate_hz = self.get_parameter('rate_hz').value
+        rate_hz = self.get_parameter("rate_hz").value
         self.timer = self.create_timer(1.0 / rate_hz, self.timer_callback)
 
         self._logger.info(
-            'Handle pose node tracking markers '
-            f'{[marker_id for marker_id, _ in self.tray_markers]} -> '
-            f'{self.handle_frame} ({self.handle_iri})'
+            "Handle pose node tracking markers "
+            f"{[marker_id for marker_id, _ in self.tray_markers]} -> "
+            f"{self.handle_frame} ({self.handle_iri})"
         )
 
     def _require_str(self, name):
@@ -109,7 +107,7 @@ class HandlePoseNode(Node):
         if not value:
             raise ValueError(
                 f"parameter '{name}' is required (set it from the tray/world_marker section of "
-                'table_setup.yml)'
+                "table_setup.yml)"
             )
         return value
 
@@ -118,7 +116,7 @@ class HandlePoseNode(Node):
         if value < 0:
             raise ValueError(
                 f"parameter '{name}' is required (set it from the tray section of "
-                'table_setup.yml)'
+                "table_setup.yml)"
             )
         return value
 
@@ -127,7 +125,7 @@ class HandlePoseNode(Node):
         if not value or len(value) != 6:
             raise ValueError(
                 f"parameter '{name}' is required and must have 6 values "
-                '[x, y, z, roll, pitch, yaw] (set it from the tray section of table_setup.yml)'
+                "[x, y, z, roll, pitch, yaw] (set it from the tray section of table_setup.yml)"
             )
         return offset_matrix(*value)
 
@@ -135,7 +133,7 @@ class HandlePoseNode(Node):
         now = self.get_clock().now()
 
         for marker_id, T_marker_handle in self.tray_markers:
-            marker_frame = f'marker_{marker_id}'
+            marker_frame = f"marker_{marker_id}"
             try:
                 transform = self.tf_buffer.lookup_transform(
                     self.table_anchor_frame, marker_frame, Time()
@@ -199,8 +197,8 @@ def main(args=None):
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        rclpy.try_shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

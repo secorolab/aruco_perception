@@ -5,16 +5,17 @@ from pathlib import Path
 import numpy as np
 import yaml
 from ament_index_python.packages import get_package_share_directory
-from rdflib import Namespace
-from rdflib.namespace import RDF
-
 from rdf_utils.models.geom_coord import get_transform_between_frames
 from rdf_utils.uri import try_expand_curie
+from rdflib import Namespace
+from rdflib.namespace import RDF
 from scene_dsl.langs import scenex_metamodel
 from scene_dsl.rdf.scenex import create_scenex_model_graph
 from vision_msgs.msg import Detection3D, ObjectHypothesisWithPose
 
-GEOM = Namespace('https://comp-rob2b.github.io/metamodels/geometry/structural-entities#')
+GEOM = Namespace(
+    "https://comp-rob2b.github.io/metamodels/geometry/structural-entities#"
+)
 
 
 def load_setup(config_path):
@@ -22,24 +23,56 @@ def load_setup(config_path):
     with open(config_path) as stream:
         config = yaml.safe_load(stream)
     if not isinstance(config, dict):
-        raise ValueError(f"table setup '{config_path}' must contain a mapping")
+        raise TypeError(f"table setup '{config_path}' must contain a mapping")
     return config
 
 
 def frame_by_name(config, name):
     """Return one named configured frame, rejecting missing or duplicate names."""
-    matches = [frame for frame in config.get('frames', []) if frame.get('frame') == name]
+    matches = [
+        frame for frame in config.get("frames", []) if frame.get("frame") == name
+    ]
     if len(matches) != 1:
-        raise ValueError(f"frame '{name}' must be declared exactly once, found {len(matches)}")
+        raise ValueError(
+            f"frame '{name}' must be declared exactly once, found {len(matches)}"
+        )
     return matches[0]
+
+
+def anchored_sensor_specs(config):
+    """Return validated ArUco-anchored sensors; omit externally posed sensors."""
+    specs = {}
+    camera_link_frames = set()
+    for sensor_name, sensor in config.get("sensors", {}).items():
+        anchor_frame = sensor.get("anchor_frame")
+        if not anchor_frame:
+            continue
+        camera_link_frame = sensor.get("camera_link_frame")
+        if not camera_link_frame:
+            raise ValueError(
+                f"anchored sensor '{sensor_name}' must declare camera_link_frame"
+            )
+        if camera_link_frame in camera_link_frames:
+            raise ValueError(f"camera link frame '{camera_link_frame}' is not unique")
+        camera_link_frames.add(camera_link_frame)
+
+        marker = frame_by_name(config, anchor_frame).get("marker")
+        if marker is None:
+            raise ValueError(f"anchor frame '{anchor_frame}' must declare a marker")
+        specs[sensor_name] = {
+            **sensor,
+            "marker_id": int(marker["marker_id"]),
+            "marker_size": float(marker["marker_size"]),
+        }
+    return specs
 
 
 def load_scene_graph(config):
     """Generate the RDF graph directly from the configured packaged .scenex model."""
-    model = config['model']
-    if model.get('path_type') != 'ros':
+    model = config["model"]
+    if model.get("path_type") != "ros":
         raise ValueError("model.path_type must be 'ros'")
-    path = Path(get_package_share_directory(model['package'])) / model['path']
+    path = Path(get_package_share_directory(model["package"])) / model["path"]
     return create_scenex_model_graph(scenex_metamodel().model_from_file(str(path)))
 
 
@@ -64,18 +97,20 @@ def transform_between_frames(graph, frame, ref_frame):
         if frame_pose is not None and ref_pose is not None:
             return ref_pose.inv() * frame_pose
 
-    raise ValueError(f"no pose path connects '{frame}' to reference frame '{ref_frame}'")
+    raise ValueError(
+        f"no pose path connects '{frame}' to reference frame '{ref_frame}'"
+    )
 
 
 def imgmsg_to_cv2(msg):
-    dtype = np.uint16 if '16' in msg.encoding else np.uint8
-    channels = 1 if 'mono' in msg.encoding or msg.encoding == '8UC1' else 3
+    dtype = np.uint16 if "16" in msg.encoding else np.uint8
+    channels = 1 if "mono" in msg.encoding or msg.encoding == "8UC1" else 3
     img = (
         np.frombuffer(msg.data, dtype=dtype).reshape(msg.height, msg.width, channels)
         if channels > 1
         else np.frombuffer(msg.data, dtype=dtype).reshape(msg.height, msg.width)
     )
-    if msg.encoding == 'rgb8':
+    if msg.encoding == "rgb8":
         img = img[:, :, ::-1].copy()
     return img
 

@@ -1,7 +1,14 @@
 sensors:
-  static_camera:
-    image_topic: /camera/camera/color/image_raw
-    camera_info_topic: /camera/camera/color/camera_info
+  robot_table_camera:
+    image_topic: /cameras/robot_table_camera/color/image_raw
+    camera_info_topic: /cameras/robot_table_camera/color/camera_info
+    camera_link_frame: robot_table_camera_link
+    anchor_frame: table_anchor
+  rk_table_camera:
+    image_topic: /cameras/rk_table_camera/color/image_raw
+    camera_info_topic: /cameras/rk_table_camera/color/camera_info
+    camera_link_frame: rk_table_camera_link
+    anchor_frame: rk_anchor
   arm_camera:
     ip: 192.168.1.12
     image_topic: /camera/color/image_raw
