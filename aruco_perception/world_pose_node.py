@@ -5,6 +5,7 @@ import numpy as np
 import rclpy
 from geometry_msgs.msg import TransformStamped
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 from rclpy.time import Time
 from scipy.spatial.transform import Rotation as R
 from sensor_msgs.msg import CameraInfo, Image
@@ -55,7 +56,7 @@ class WorldPoseNode(Node):
                 Image,
                 sensor["image_topic"],
                 partial(self.image_callback, sensor_name=name),
-                10,
+                qos_profile_sensor_data,
             )
             for name, sensor in configured_sensors.items()
         ]
@@ -64,7 +65,7 @@ class WorldPoseNode(Node):
                 CameraInfo,
                 sensor["camera_info_topic"],
                 partial(self.camera_info_callback, sensor_name=name),
-                10,
+                qos_profile_sensor_data,
             )
             for name, sensor in configured_sensors.items()
         ]

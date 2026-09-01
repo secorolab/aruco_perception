@@ -27,6 +27,7 @@ install(PROGRAMS
   scripts/object_pose_node
   scripts/mock_object_pose_publisher
   scripts/handle_pose_node
+  scripts/gen_sim_markers
   DESTINATION lib/${PROJECT_NAME}
 )
 

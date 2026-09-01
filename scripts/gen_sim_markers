@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+from aruco_perception.sim_markers import main
+
+if __name__ == '__main__':
+    main()

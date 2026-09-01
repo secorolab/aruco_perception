@@ -5,6 +5,7 @@ import numpy as np
 import rclpy
 from geometry_msgs.msg import TransformStamped
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 from rclpy.time import Time
 from scipy.spatial.transform import Rotation as R
 from sensor_msgs.msg import CameraInfo, Image
@@ -101,7 +102,7 @@ class DetectObjectsNode(Node):
                     Image,
                     camera["image_topic"],
                     partial(self.image_callback, sensor_name=sensor_name),
-                    10,
+                    qos_profile_sensor_data,
                 )
             )
             self.camera_info_subs.append(
@@ -109,7 +110,7 @@ class DetectObjectsNode(Node):
                     CameraInfo,
                     camera["camera_info_topic"],
                     partial(self.camera_info_callback, sensor_name=sensor_name),
-                    10,
+                    qos_profile_sensor_data,
                 )
             )
 

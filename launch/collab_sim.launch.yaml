@@ -1,0 +1,41 @@
+launch:
+  - arg:
+      name: config_path
+      default: "$(find-pkg-share bdd_collab_bhv_cpp)/config/collab_sim_perception.yml"
+      description: "Path to the generated simulation perception configuration"
+
+  - arg:
+      name: max_tf_age
+      default: "0.5"
+      description: "Freshness window for marker poses and sensor priority"
+
+  - arg:
+      name: publish_markers
+      default: "false"
+      description: "Publish RViz arrows on /recognized_object_markers"
+
+  - node:
+      pkg: aruco_perception
+      exec: world_pose_node
+      name: world_pose_node
+      output: screen
+      param:
+        - name: config_path
+          value: "$(var config_path)"
+        - name: camera_link_frame
+          value: "perception"
+
+  - node:
+      pkg: aruco_perception
+      exec: object_pose_node
+      name: object_pose_node
+      output: screen
+      param:
+        - name: config_path
+          value: "$(var config_path)"
+        - name: max_tf_age
+          value: "$(var max_tf_age)"
+          type: float
+        - name: publish_markers
+          value: "$(var publish_markers)"
+          type: bool
