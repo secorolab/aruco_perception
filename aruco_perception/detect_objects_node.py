@@ -115,7 +115,7 @@ class DetectObjectsNode(Node):
             )
 
         self.tf_broadcaster = TransformBroadcaster(self)
-        self.tf_buffer = Buffer()
+        self.tf_buffer = Buffer(node=self)
         self.tf_listener = TransformListener(self.tf_buffer, self)
         self.debug_pub = self.create_publisher(Image, "debug_image_objects", 10)
 

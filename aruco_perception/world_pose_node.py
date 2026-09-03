@@ -49,7 +49,7 @@ class WorldPoseNode(Node):
             for name, sensor in configured_sensors.items()
         }
 
-        self.tf_buffer = Buffer()
+        self.tf_buffer = Buffer(node=self)
         self.tf_listener = TransformListener(self.tf_buffer, self)
         self.image_subs = [
             self.create_subscription(
