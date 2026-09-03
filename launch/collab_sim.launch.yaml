@@ -14,6 +14,11 @@ launch:
       default: "false"
       description: "Publish RViz arrows on /recognized_object_markers"
 
+  - arg:
+      name: use_sim_time
+      default: "true"
+      description: "Read /clock; the simulated cameras stamp their images in simulation time"
+
   - node:
       pkg: aruco_perception
       exec: world_pose_node
@@ -24,6 +29,9 @@ launch:
           value: "$(var config_path)"
         - name: camera_link_frame
           value: "perception"
+        - name: use_sim_time
+          value: "$(var use_sim_time)"
+          type: bool
 
   - node:
       pkg: aruco_perception
@@ -38,4 +46,7 @@ launch:
           type: float
         - name: publish_markers
           value: "$(var publish_markers)"
+          type: bool
+        - name: use_sim_time
+          value: "$(var use_sim_time)"
           type: bool
