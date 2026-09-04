@@ -38,21 +38,22 @@ frames:
     iri: collab-scn:collab-kgraph/rk-table-body/work_surface
   - frame: drawer_handle
     iri: collab-scn:collab-kgraph/drawer-body/drawer-handle
+    upright: rk_anchor
     fixed:
       - wrt: marker_handle
-        x: -0.065
+        x: 0.053
         y: 0.0
         z: 0.02
-        roll: 0.0
+        roll: -1.5708
         pitch: 0.0
         yaw: 0.0
       - wrt: marker_back
         x: 0.0
         y: 0.0
         z: -0.22
-        roll: 0.0
+        roll: 1.5708
         pitch: 0.0
-        yaw: 0.0
+        yaw: -3.14159
   - frame: marker_handle
     marker:
       marker_size: 0.05
@@ -62,15 +63,18 @@ frames:
       marker_size: 0.05
       marker_id: 2
 
-ref_frame: table_anchor
+ref_frame: base_link
 
 objects:
-  - name: drawer_handle_obj
-    frame: drawer_handle
-    iri: collab-scn:drawer
   - name: robot_table_obj
     frame: robot_table_top
     iri: collab-scn:robot-ws
+  - name: drawer_handle_obj
+    frame: drawer_handle
+    iri: collab-scn:collab-kgraph/drawer-body/drawer-handle
+  - name: drawer_obj
+    frame: drawer_handle
+    iri: collab-scn:drawer
   - name: rk_table_obj
     frame: rk_table_top
     iri: collab-scn:wall-ws

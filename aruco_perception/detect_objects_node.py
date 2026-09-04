@@ -13,7 +13,16 @@ from tf2_ros import TransformBroadcaster, TransformException
 from tf2_ros.buffer import Buffer
 from tf2_ros.transform_listener import TransformListener
 
-from .utils import anchored_sensor_specs, imgmsg_to_cv2, load_setup
+from .utils import (
+    anchored_sensor_specs,
+    imgmsg_to_cv2,
+    load_scene_graph,
+    load_setup,
+    marker_detector,
+    marker_frame_ids,
+    offset_transform,
+    static_frame_poses,
+)
 
 
 def observation_has_priority(sensors, sensor_name, marker_id, now_ns, max_age_ns):
@@ -85,14 +94,13 @@ class DetectObjectsNode(Node):
             if marker_id not in anchor_marker_ids
         }
 
-        marker_dict_name = self.config.get("marker_dict", "DICT_4X4_50")
-        marker_dict = getattr(cv2.aruco, marker_dict_name, None)
-        if marker_dict is None:
-            raise ValueError(f"Invalid marker dictionary: {marker_dict_name}")
-        self.detector = cv2.aruco.ArucoDetector(
-            cv2.aruco.getPredefinedDictionary(marker_dict),
-            cv2.aruco.DetectorParameters(),
+        self.scene_graph = load_scene_graph(self.config)
+        self.static_frames = static_frame_poses(
+            self.scene_graph, self.config, self.table_anchor_frame
         )
+        self.upright_priors = self._upright_priors()
+
+        self.detector = marker_detector(self.config)
 
         self.image_subs = []
         self.camera_info_subs = []
@@ -122,6 +130,49 @@ class DetectObjectsNode(Node):
         self._logger.info(
             f"Detect Objects node started for sensors: {', '.join(self.sensors)}"
         )
+
+    def _upright_priors(self):
+        """Map each marker of an upright-constrained frame to its support surface."""
+        marker_ids = marker_frame_ids(self.marker_frames)
+        priors = {}
+        for frame in self.config.get("frames", []):
+            support_frame = frame.get("upright")
+            if support_frame is None:
+                continue
+            if support_frame not in self.static_frames:
+                raise ValueError(
+                    f"frame '{frame['frame']}' is upright wrt '{support_frame}', which "
+                    "is not a statically posed configured frame"
+                )
+            for relation in frame.get("fixed", []):
+                try:
+                    marker_id = marker_ids[relation["wrt"]]
+                except KeyError as error:
+                    raise ValueError(
+                        f"upright frame '{frame['frame']}' refers to non-marker frame "
+                        f"'{relation['wrt']}'"
+                    ) from error
+                priors[marker_id] = (
+                    offset_transform(relation).rotation,
+                    self.static_frames[support_frame].rotation,
+                )
+        return priors
+
+    def _upright_solution(self, marker_id, rvecs, tvecs, T_world_cam):
+        """Pick the IPPE branch whose derived frame stands squarest on its support."""
+        prior = self.upright_priors.get(marker_id)
+        if prior is None or len(rvecs) == 1:
+            return rvecs[0], tvecs[0]
+
+        marker_to_frame, support = prior
+        world_cam = R.from_matrix(T_world_cam[0:3, 0:3])
+
+        def tilt(rvec):
+            cam_marker = R.from_matrix(cv2.Rodrigues(rvec)[0])
+            local = support.inv() * world_cam * cam_marker * marker_to_frame
+            return np.arccos(np.clip(local.as_matrix()[2, 2], -1.0, 1.0))
+
+        return min(zip(rvecs, tvecs), key=lambda solution: tilt(solution[0]))
 
     def camera_info_callback(self, msg, sensor_name):
         sensor = self.sensors[sensor_name]
@@ -185,15 +236,18 @@ class DetectObjectsNode(Node):
                     ],
                     dtype=np.float64,
                 )
-                ok, rvec, tvec = cv2.solvePnP(
+                solutions, rvecs, tvecs, _ = cv2.solvePnPGeneric(
                     obj_points,
                     corners[i][0].astype(np.float64),
                     camera_matrix,
                     sensor["dist_coeffs"],
                     flags=cv2.SOLVEPNP_IPPE_SQUARE,
                 )
-                if not ok:
+                if solutions == 0:
                     continue
+                rvec, tvec = self._upright_solution(
+                    marker_id, rvecs, tvecs, T_world_cam
+                )
 
                 cv2.drawFrameAxes(
                     frame,

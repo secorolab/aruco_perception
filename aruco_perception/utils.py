@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import cv2
 import numpy as np
 import yaml
 from ament_index_python.packages import get_package_share_directory
@@ -11,6 +12,8 @@ from rdflib import Namespace
 from rdflib.namespace import RDF
 from scene_dsl.langs import scenex_metamodel
 from scene_dsl.rdf.scenex import create_scenex_model_graph
+from scipy.spatial.transform import RigidTransform
+from scipy.spatial.transform import Rotation as R
 from vision_msgs.msg import Detection3D, ObjectHypothesisWithPose
 
 GEOM = Namespace(
@@ -100,6 +103,46 @@ def transform_between_frames(graph, frame, ref_frame):
     raise ValueError(
         f"no pose path connects '{frame}' to reference frame '{ref_frame}'"
     )
+
+
+def marker_detector(config):
+    """Build the configured detector; corners are refined because the markers span ~27 px."""
+    marker_dict_name = config.get("marker_dict", "DICT_4X4_50")
+    marker_dict = getattr(cv2.aruco, marker_dict_name, None)
+    if marker_dict is None:
+        raise ValueError(f"Invalid marker dictionary: {marker_dict_name}")
+    parameters = cv2.aruco.DetectorParameters()
+    parameters.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX
+    return cv2.aruco.ArucoDetector(
+        cv2.aruco.getPredefinedDictionary(marker_dict), parameters
+    )
+
+
+def offset_transform(offset):
+    """Build the configured wrt-frame -> derived-frame transform."""
+    matrix = np.eye(4)
+    matrix[0:3, 0:3] = R.from_euler(
+        "xyz", [offset["roll"], offset["pitch"], offset["yaw"]]
+    ).as_matrix()
+    matrix[0:3, 3] = [offset["x"], offset["y"], offset["z"]]
+    return RigidTransform.from_matrix(matrix)
+
+
+def static_frame_poses(graph, config, ref_frame):
+    """Pose every model-placed configured frame relative to the reference frame."""
+    ref_iri = expand_iri(graph, frame_by_name(config, ref_frame)["iri"])
+    return {
+        frame["frame"]: transform_between_frames(
+            graph, expand_iri(graph, frame["iri"]), ref_iri
+        )
+        for frame in config.get("frames", [])
+        if frame["frame"] != ref_frame and "iri" in frame and not frame.get("fixed")
+    }
+
+
+def marker_frame_ids(marker_frames):
+    """Invert the marker table into frame name -> marker id."""
+    return {marker["frame"]: marker_id for marker_id, marker in marker_frames.items()}
 
 
 def imgmsg_to_cv2(msg):

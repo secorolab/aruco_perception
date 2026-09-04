@@ -18,19 +18,19 @@ from .utils import (
     detection_msg,
     expand_iri,
     frame_by_name,
-    load_scene_graph,
-    transform_between_frames,
+    marker_frame_ids,
+    offset_transform,
 )
 
 
-def offset_transform(offset):
-    """Build the configured wrt-frame -> derived-frame transform."""
-    matrix = np.eye(4)
-    matrix[0:3, 0:3] = R.from_euler(
-        "xyz", [offset["roll"], offset["pitch"], offset["yaw"]]
-    ).as_matrix()
-    matrix[0:3, 3] = [offset["x"], offset["y"], offset["z"]]
-    return RigidTransform.from_matrix(matrix)
+def upright_pose(pose, support):
+    """Drop the roll and pitch an object standing on its support surface cannot have."""
+    local = support.inv() * pose
+    forward = local.rotation.as_matrix()[:, 0]
+    yaw = np.arctan2(forward[1], forward[0])
+    return support * RigidTransform.from_components(
+        local.translation, R.from_euler("z", yaw)
+    )
 
 
 def transform_message_value(transform):
@@ -73,19 +73,8 @@ class ObjectPoseNode(DetectObjectsNode):
         self.declare_parameter("rate_hz", 2.0)
         self.declare_parameter("publish_markers", False)
 
-        graph = load_scene_graph(self.config)
-        ref_spec = frame_by_name(self.config, self.table_anchor_frame)
-        ref_iri = expand_iri(graph, ref_spec["iri"])
-
-        static_frames = {
-            frame["frame"]: transform_between_frames(
-                graph, expand_iri(graph, frame["iri"]), ref_iri
-            )
-            for frame in self.config.get("frames", [])
-            if frame["frame"] != self.table_anchor_frame
-            and "iri" in frame
-            and not frame.get("fixed")
-        }
+        graph = self.scene_graph
+        static_frames = self.static_frames
         self.static_tf_broadcaster = StaticTransformBroadcaster(self)
         stamp = self.get_clock().now().to_msg()
         self.static_tf_broadcaster.sendTransform(
@@ -95,10 +84,7 @@ class ObjectPoseNode(DetectObjectsNode):
             ]
         )
 
-        marker_ids = {
-            marker["frame"]: marker_id
-            for marker_id, marker in self.marker_frames.items()
-        }
+        marker_ids = marker_frame_ids(self.marker_frames)
         objects = []
         for configured_object in self.config.get("objects", []):
             frame = frame_by_name(self.config, configured_object["frame"])
@@ -121,6 +107,7 @@ class ObjectPoseNode(DetectObjectsNode):
             else:
                 source = static_frames[frame["frame"]]
 
+            support_frame = frame.get("upright")
             objects.append(
                 {
                     "name": configured_object["name"],
@@ -128,6 +115,7 @@ class ObjectPoseNode(DetectObjectsNode):
                     "iri": object_iri,
                     "source": source,
                     "dynamic": bool(fixed),
+                    "upright": static_frames[support_frame] if support_frame else None,
                 }
             )
         self.objects = objects
@@ -176,6 +164,8 @@ class ObjectPoseNode(DetectObjectsNode):
             )
             if pose is None:
                 continue
+            if configured_object["upright"] is not None:
+                pose = upright_pose(pose, configured_object["upright"])
 
             detection = detection_msg(
                 configured_object["iri"],

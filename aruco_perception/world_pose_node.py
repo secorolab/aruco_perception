@@ -13,7 +13,7 @@ from tf2_ros import TransformBroadcaster, TransformException
 from tf2_ros.buffer import Buffer
 from tf2_ros.transform_listener import TransformListener
 
-from .utils import anchored_sensor_specs, imgmsg_to_cv2, load_setup
+from .utils import anchored_sensor_specs, imgmsg_to_cv2, load_setup, marker_detector
 
 
 class WorldPoseNode(Node):
@@ -31,14 +31,7 @@ class WorldPoseNode(Node):
         config = load_setup(config_path)
         configured_sensors = anchored_sensor_specs(config)
 
-        marker_dict_name = config.get("marker_dict", "DICT_4X4_50")
-        marker_dict = getattr(cv2.aruco, marker_dict_name, None)
-        if marker_dict is None:
-            raise ValueError(f"Invalid marker dictionary: {marker_dict_name}")
-        self.detector = cv2.aruco.ArucoDetector(
-            cv2.aruco.getPredefinedDictionary(marker_dict),
-            cv2.aruco.DetectorParameters(),
-        )
+        self.detector = marker_detector(config)
 
         self.sensors = {
             name: {
