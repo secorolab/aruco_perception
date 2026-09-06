@@ -21,7 +21,7 @@ launch:
 
   - arg:
       name: rk_table_camera_serial
-      default: "_230322273236"
+      default: "_338522300210"
       description: "Serial number of the RK-table camera"
 
   - include:

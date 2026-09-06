@@ -41,7 +41,7 @@ frames:
     upright: rk_anchor
     fixed:
       - wrt: marker_handle
-        x: 0.053
+        x: 0.0575
         y: 0.0
         z: 0.02
         roll: -1.5708
@@ -56,7 +56,7 @@ frames:
         yaw: -3.14159
   - frame: marker_handle
     marker:
-      marker_size: 0.05
+      marker_size: 0.08
       marker_id: 1
   - frame: marker_back
     marker:
