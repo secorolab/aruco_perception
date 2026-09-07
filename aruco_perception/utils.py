@@ -113,6 +113,8 @@ def marker_detector(config):
         raise ValueError(f"Invalid marker dictionary: {marker_dict_name}")
     parameters = cv2.aruco.DetectorParameters()
     parameters.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX
+    # OpenCV's default 7 loses a borderless marker on a shaded wall (gray 47 against 0).
+    parameters.adaptiveThreshConstant = float(config.get("adaptive_thresh_constant", 7.0))
     return cv2.aruco.ArucoDetector(
         cv2.aruco.getPredefinedDictionary(marker_dict), parameters
     )

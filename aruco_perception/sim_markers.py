@@ -124,7 +124,9 @@ def mount_markers(spec, asset_dir):
 
         for marker, mount in mounted:
             marker_id = int(marker['id'])
-            half = geom_half_extent(float(marker['size']), quiet_modules, dictionary)
+            half = geom_half_extent(
+                float(marker['size']), int(marker.get('quiet_modules', quiet_modules)), dictionary
+            )
             texture = os.path.relpath(asset_dir / f'marker_{marker_id}.png', target.parent)
             ET.SubElement(assets, 'texture', {
                 'name': f'aruco_{marker_id}_tex', 'type': '2d', 'file': texture,
@@ -175,8 +177,12 @@ def setup_config(spec, sensors, model, ref_frame, frames, objects):
         }
         marker_frames.append(frame)
 
-    return {
+    config = {
         'marker_dict': spec.get('dictionary', DEFAULT_DICTIONARY),
+    }
+    if 'adaptive_thresh_constant' in spec:
+        config['adaptive_thresh_constant'] = float(spec['adaptive_thresh_constant'])
+    return config | {
         'sensors': sensors,
         'model': model,
         'frames': marker_frames + list(frames),
@@ -195,18 +201,16 @@ def write_marker_assets(spec, asset_dir):
     written = []
     for marker in spec['markers']:
         marker_id = int(marker['id'])
+        # A printed sheet may stop at the black square; the wall it is on is then the quiet zone.
+        quiet = int(marker.get('quiet_modules', quiet_modules))
         image_path = asset_dir / f'marker_{marker_id}.png'
-        if not cv2.imwrite(
-            str(image_path), marker_image(dictionary, marker_id, module_px, quiet_modules)
-        ):
+        if not cv2.imwrite(str(image_path), marker_image(dictionary, marker_id, module_px, quiet)):
             raise OSError(f'could not write {image_path}')
         written.append(image_path)
         if marker.get('mount') is not None:
             continue
         mjcf_path = asset_dir / f'marker_{marker_id}.xml'
-        mjcf_path.write_text(
-            marker_mjcf(marker_id, float(marker['size']), quiet_modules, dictionary)
-        )
+        mjcf_path.write_text(marker_mjcf(marker_id, float(marker['size']), quiet, dictionary))
         written.append(mjcf_path)
     return written
 
